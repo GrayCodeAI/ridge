@@ -805,6 +805,18 @@ impl App {
                             Err(e) => self.status_message = format!("merge failed: {e}"),
                         }
                     }
+                } else if parts.len() >= 4 && parts[1] == "check" {
+                    if let (Ok(id), Ok(n)) = (parts[2].parse::<u64>(), parts[3].parse::<usize>()) {
+                        match self.task_board.check_toggle(id, n) {
+                            Ok(done) => {
+                                self.status_message = format!(
+                                    "task {id} checklist {n} {}",
+                                    if done { "checked ✓" } else { "unchecked" }
+                                );
+                            }
+                            Err(e) => self.status_message = format!("check failed: {e}"),
+                        }
+                    }
                 } else if parts.len() >= 3 && parts[1] == "from-inbox" {
                     if let Ok(n) = parts[2].parse::<usize>() {
                         let len = self.inbox.items.len();
@@ -2223,5 +2235,68 @@ mod race_history_tests {
         );
         assert!(a.status_message.contains("ship it"));
         let _ = std::fs::remove_dir_all(&app_cwd);
+    }
+}
+
+#[cfg(test)]
+mod check_command_tests {
+    use super::*;
+    use crate::config::Config;
+    use std::process::Command;
+
+    fn quiet_repo(suffix: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("term-check-cmd-{suffix}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for c in [
+            ["init"].as_slice(),
+            ["config", "user.email", "t@t.com"].as_slice(),
+            ["config", "user.name", "t"].as_slice(),
+        ] {
+            Command::new("git")
+                .args(c)
+                .current_dir(&dir)
+                .output()
+                .unwrap();
+        }
+        std::fs::write(dir.join("a.txt"), "hi").unwrap();
+        Command::new("git")
+            .args(["add", "."])
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "-m", "init"])
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        dir
+    }
+
+    #[test]
+    fn from_inbox_promotes_with_checklist_and_check_toggles() {
+        let repo = quiet_repo("1");
+        let mut a = App::new(Config::default());
+        a.cwd = repo.clone();
+
+        // A captured reply with bullets.
+        a.inbox.send(1, "Claude #1", "kickoff");
+        let item = a.inbox.items.first_mut().unwrap();
+        item.arrived = true;
+        item.reply = "- refactor the module\n- update the docs".to_string();
+
+        a.execute_command("task from-inbox 1");
+        assert!(a.status_message.contains("task 1 created"));
+        assert!(a.inbox.items.is_empty(), "item consumed");
+        let board = &a.task_board;
+        let t = &board.tasks[0];
+        assert_eq!(t.checklist.as_ref().unwrap().len(), 2);
+
+        // :task check <id> <n>
+        a.execute_command("task check 1 1");
+        assert!(a.status_message.contains("checked"));
+        let t = &a.task_board.tasks[0];
+        assert!(t.checklist.as_ref().unwrap()[0].done);
+        let _ = std::fs::remove_dir_all(&repo);
     }
 }

@@ -22,6 +22,7 @@ Type `:` to enter command mode.
 - `task merge <id>` — merge branch
 - `task filter <status|text|all>` — filter the board view
 - `task from-inbox <n>` — promote inbox item `n` (1 = newest, as numbered in the `o` overlay) into a task; the captured reply is stored in its notes and shown on the board as ` [reply: …]`
+- `task check <id> <n>` — toggle item `n` on a task's checklist (1-based); checklists are auto-seeded from `-`/`*` bullet lines in the promoted reply
 - `task kanban` — show kanban
 - `task fanout <prompt>` — fan out to multiple agents
 - `task subagent <parent> <agent>` — spawn subagent

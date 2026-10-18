@@ -37,6 +37,34 @@ pub struct Task {
     /// Free-form notes (e.g. captured inbox reply that promoted this task).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
+    /// Actionable checklist (bullets captured from a promoted reply).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checklist: Option<Vec<CheckItem>>,
+}
+
+/// One checkbox row on a task's checklist.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CheckItem {
+    pub label: String,
+    #[serde(default)]
+    pub done: bool,
+}
+
+/// Extract bullets (lines starting with `-` or `*`) as a checklist.
+pub fn checklist_from_reply(reply: &str) -> Option<Vec<CheckItem>> {
+    let items: Vec<CheckItem> = reply
+        .lines()
+        .filter_map(|l| {
+            let l = l.trim();
+            let body = l.strip_prefix("- ").or(l.strip_prefix("* "))?;
+            let body = body.trim();
+            (!body.is_empty()).then(|| CheckItem {
+                label: body.to_string(),
+                done: false,
+            })
+        })
+        .collect();
+    (!items.is_empty()).then_some(items)
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -86,11 +114,13 @@ impl TaskBoard {
             pane_id: None,
             leased_paths: Vec::new(),
             notes: None,
+            checklist: None,
         });
         id
     }
 
-    /// Add a task seeded from a captured inbox reply; notes record the reply.
+    /// Add a task seeded from a captured inbox reply; notes record the reply
+    /// and any `-`/`*` bullet lines become a checklist.
     pub fn add_from_reply(&mut self, pane_title: &str, prompt: &str, reply: &str) -> u64 {
         let title = if prompt.chars().count() > 80 {
             let t: String = prompt.chars().take(77).collect();
@@ -99,11 +129,33 @@ impl TaskBoard {
             prompt.to_string()
         };
         let notes = format!("from: {pane_title}\nprompt: {prompt}\nreply: {reply}");
+        let checklist = checklist_from_reply(reply);
         let id = self.add(title, vec![], None);
         if let Some(t) = self.tasks.last_mut() {
             t.notes = Some(notes);
+            t.checklist = checklist;
         }
         id
+    }
+
+    /// Toggle checklist item `n` (1-based) on task `id`.
+    /// Returns the new state of the item.
+    pub fn check_toggle(&mut self, id: u64, n: usize) -> Result<bool, String> {
+        let task = self
+            .tasks
+            .iter_mut()
+            .find(|t| t.id == id)
+            .ok_or("no such task")?;
+        let list = task.checklist.as_mut().ok_or("task has no checklist")?;
+        if n == 0 || n > list.len() {
+            return Err(format!(
+                "checklist item {n} out of range (1–{})",
+                list.len()
+            ));
+        }
+        let item = &mut list[n - 1];
+        item.done = !item.done;
+        Ok(item.done)
     }
 
     pub fn ready_tasks(&self) -> Vec<u64> {
@@ -275,6 +327,12 @@ impl TaskBoard {
                 leases,
                 note.unwrap_or_default()
             ));
+            if let Some(list) = &t.checklist {
+                for (i, c) in list.iter().enumerate() {
+                    let mark = if c.done { "[x]" } else { "[ ]" };
+                    out.push_str(&format!("       {} {}. {}\n", mark, i + 1, c.label));
+                }
+            }
         }
         out
     }
@@ -391,6 +449,68 @@ mod notes_tests {
         let b2 = TaskBoard::load(&dir);
         assert_eq!(b2.tasks.len(), 1);
         assert!(b2.tasks[0].notes.as_deref().unwrap().contains("reply: ok"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod checklist_tests {
+    use super::*;
+
+    #[test]
+    fn bullets_become_checklist() {
+        let items = checklist_from_reply("- fix the flaky test\n* add docs\nfinal prose line");
+        let list = items.unwrap();
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].label, "fix the flaky test");
+        assert_eq!(list[1].label, "add docs");
+        assert!(!list[0].done);
+
+        // no bullets → None; empty body skipped
+        assert!(checklist_from_reply("plain reply").is_none());
+        assert!(checklist_from_reply("-\n* \n-   ").is_none());
+    }
+
+    #[test]
+    fn add_from_reply_seeds_checklist() {
+        let mut b = TaskBoard::default();
+        let id = b.add_from_reply(
+            "Claude #3",
+            "refactor auth",
+            "- split module\n- update tests",
+        );
+        let t = b.tasks.iter().find(|t| t.id == id).unwrap();
+        assert_eq!(t.checklist.as_ref().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn check_toggle_flips_and_validates() {
+        let mut b = TaskBoard::default();
+        let id = b.add_from_reply("agent", "p", "- one\n- two");
+        assert_eq!(b.check_toggle(id, 1).unwrap(), true);
+        assert_eq!(b.check_toggle(id, 1).unwrap(), false);
+        assert_eq!(b.check_toggle(id, 2).unwrap(), true);
+        assert!(b.check_toggle(999, 1).is_err());
+        assert!(b.check_toggle(id, 3).is_err());
+        // render shows the marks
+        let s = b.render();
+        assert!(s.contains("[ ] 1. one"));
+        assert!(s.contains("[x] 2. two"));
+    }
+
+    #[test]
+    fn checklist_survives_persistence() {
+        let dir = std::env::temp_dir().join("term-checklist-roundtrip");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut b = TaskBoard::default();
+        let id = b.add_from_reply("agent", "p", "- alpha\n- beta");
+        let _ = b.check_toggle(id, 2);
+        b.save(&dir).unwrap();
+        let b2 = TaskBoard::load(&dir);
+        let list = b2.tasks[0].checklist.as_ref().unwrap();
+        assert!(list[0].label == "alpha" && !list[0].done);
+        assert!(list[1].done);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
