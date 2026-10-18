@@ -1,4 +1,11 @@
+pub mod aider;
 pub mod claude;
 pub mod codex;
+pub mod copilot;
+pub mod cursor;
+pub mod gemini;
 pub mod generic;
+pub mod grok;
+pub mod kimi;
 pub mod opencode;
+pub mod pi;
