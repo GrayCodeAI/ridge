@@ -12,6 +12,7 @@ Type `:` to enter command mode.
 - `account list / add <agent> <name> / env <agent> KEY=VAL / show <agent>`
 - `module list / install <url> [name] / remove <name>` — literally install module scripts
 - `ssh <host> [args]` — open a remote shell pane over SSH
+- `worktree list / add <branch> / remove <path>` — manage git worktrees
 - `config show / config theme <n>`
 - `task add <title>` — add task
 - `task start <id> [agent]` — start task (creates worktree)

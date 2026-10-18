@@ -277,9 +277,10 @@ fn render_git(f: &mut Frame, app: &App, area: Rect) {
     let status = crate::core::git::status_porcelain(&app.cwd);
     let log = crate::core::git::log_graph(&app.cwd, 20);
     let prs = crate::core::git::gh_prs(&app.cwd);
+    let issues = crate::core::git::gh_issues(&app.cwd);
 
     let text = format!(
-        "Branch: {}\n\nStatus:\n{}\n\nHistory (graph):\n{}\n\nPull requests:\n{}",
+        "Branch: {}\n\nStatus:\n{}\n\nHistory (graph):\n{}\n\nPull requests:\n{}\n\nIssues:\n{}",
         branch,
         if status.is_empty() {
             "(clean)".to_string()
@@ -291,7 +292,8 @@ fn render_git(f: &mut Frame, app: &App, area: Rect) {
         } else {
             log
         },
-        prs
+        prs,
+        issues
     );
     let para = Paragraph::new(text).style(Style::default().fg(Color::White));
     f.render_widget(para, inner);
