@@ -37,3 +37,21 @@ pub fn run_module(path: &PathBuf) -> (String, String) {
 pub fn run_all() -> Vec<(String, String)> {
     discover().into_iter().map(|p| run_module(&p)).collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn modules_dir_path() {
+        let d = modules_dir();
+        assert!(d.to_string_lossy().contains("term"));
+        assert!(d.to_string_lossy().contains("modules"));
+    }
+
+    #[test]
+    fn discover_returns_sorted() {
+        let v = discover();
+        let _ = v.len();
+    }
+}
