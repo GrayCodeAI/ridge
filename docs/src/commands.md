@@ -27,6 +27,7 @@ Type `:` to enter command mode.
 - `task subagent <parent> <agent>` — spawn subagent
 - `race <prompt>` — start a fan-out race: claude, codex, and opencode each get their own git worktree + branch, and the prompt is delegated to them immediately
 - `race` / `race status` — show contestants, statuses, gates, and the winner (★)
+- `race leaderboard` — aggregated wins per agent from past races (persisted to `<repo>/.term-races.json`, last 50 outcomes) plus the three most recent races
 - `race gate <idx>` — run the quality gate in one contestant's worktree (`cargo test` by default for Rust repos; `:race gate-cmd <cmd>` overrides)
 - `race winner <idx> [force]` — gate the contestant, merge its branch, and clean up the losers; a failed gate blocks promotion unless `force` is given
 - `race cancel` — close all race panes and remove their worktrees

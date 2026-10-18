@@ -97,3 +97,134 @@ mod tests {
         assert!(s.contains("race:"));
     }
 }
+
+// ---- Race history / leaderboard -------------------------------------------
+
+/// One finished race: who raced, who won (if decided), gate outcomes.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct RaceRecord {
+    pub prompt: String,
+    /// Unix epoch seconds at recording time.
+    pub finished_at: u64,
+    pub winner_agent: Option<String>,
+    pub gate_results: Vec<(String, Option<bool>)>,
+    /// true when the winner was promoted with `force` despite a failed gate.
+    pub forced: bool,
+}
+
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct RaceHistory {
+    pub records: Vec<RaceRecord>,
+}
+
+impl RaceHistory {
+    pub fn load(repo: &std::path::Path) -> Self {
+        let path = repo.join(".term-races.json");
+        std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|s| serde_json::from_str::<RaceHistory>(&s).ok())
+            .unwrap_or_default()
+    }
+
+    pub fn save(&self, repo: &std::path::Path) -> Result<(), String> {
+        let path = repo.join(".term-races.json");
+        let json = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
+        std::fs::write(&path, json).map_err(|e| e.to_string())
+    }
+
+    /// Append a record, keeping at most 50 entries (newest last).
+    pub fn record(&mut self, rec: RaceRecord) {
+        self.records.push(rec);
+        while self.records.len() > 50 {
+            self.records.remove(0);
+        }
+    }
+
+    /// Aggregate wins per agent, sorted by wins then name.
+    pub fn leaderboard(&self) -> String {
+        let mut wins: Vec<(String, usize)> = Vec::new();
+        for r in &self.records {
+            if let Some(a) = &r.winner_agent {
+                match wins.iter_mut().find(|(n, _)| n == a) {
+                    Some(e) => e.1 += 1,
+                    None => wins.push((a.clone(), 1)),
+                }
+            }
+        }
+        wins.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        if wins.is_empty() {
+            return "(no decided races yet)".to_string();
+        }
+        wins.iter()
+            .map(|(n, c)| {
+                format!(
+                    "  {n}: {c} win{} over {} race{}",
+                    if *c == 1 { "" } else { "s" },
+                    self.records.len(),
+                    if self.records.len() == 1 { "" } else { "s" }
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+}
+
+#[cfg(test)]
+mod history_tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn rec(winner: Option<&str>) -> RaceRecord {
+        RaceRecord {
+            prompt: "fix it".to_string(),
+            finished_at: 1_700_000_000,
+            winner_agent: winner.map(|s| s.to_string()),
+            gate_results: vec![("claude".to_string(), Some(true))],
+            forced: false,
+        }
+    }
+
+    #[test]
+    fn record_caps_at_50() {
+        let mut h = RaceHistory::default();
+        for _ in 0..55 {
+            h.record(rec(Some("claude")));
+        }
+        assert_eq!(h.records.len(), 50);
+    }
+
+    #[test]
+    fn leaderboard_counts_and_sorts() {
+        let mut h = RaceHistory::default();
+        h.record(rec(Some("claude")));
+        h.record(rec(Some("claude")));
+        h.record(rec(Some("codex")));
+        h.record(rec(None)); // abandoned — not on the scoreboard
+        let s = h.leaderboard();
+        assert!(s.starts_with("  claude: 2 wins"), "{s}");
+        assert!(s.contains("codex: 1 win"));
+    }
+
+    #[test]
+    fn empty_history_leaderboard() {
+        let h = RaceHistory::default();
+        assert_eq!(h.leaderboard(), "(no decided races yet)");
+    }
+
+    #[test]
+    fn save_load_roundtrip() {
+        let dir = std::env::temp_dir().join("term-race-history");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut h = RaceHistory::default();
+        h.record(rec(Some("opencode")));
+        h.save(&dir).unwrap();
+        let h2 = RaceHistory::load(&dir);
+        assert_eq!(h2.records.len(), 1);
+        assert_eq!(h2.records[0].winner_agent.as_deref(), Some("opencode"));
+        let path = dir.join(".term-races.json");
+        assert_eq!(path, PathBuf::from(dir.join(".term-races.json")));
+        assert!(path.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

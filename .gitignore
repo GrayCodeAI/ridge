@@ -1,4 +1,6 @@
 /target
 *.log
 .term/
+.term-*.json
+.term-worktrees/
 docs/book/
