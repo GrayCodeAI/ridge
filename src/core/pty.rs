@@ -9,7 +9,12 @@ pub struct PtySession {
     pub parser: Arc<Mutex<vt100::Parser>>,
     pub child: Box<dyn portable_pty::Child + Send + Sync>,
     pub alive: Arc<std::sync::atomic::AtomicBool>,
+    /// Raw session output (capped); used for timeline capture.
+    pub raw_log: Arc<Mutex<Vec<u8>>>,
 }
+
+/// Cap for the raw session buffer (8 MiB). Older output is dropped.
+pub const RAW_LOG_CAP: usize = 8 * 1024 * 1024;
 
 impl PtySession {
     pub fn spawn(cmd: CommandBuilder, rows: u16, cols: u16) -> anyhow::Result<Self> {
@@ -32,6 +37,8 @@ impl PtySession {
 
         let parser_clone = Arc::clone(&parser);
         let alive_clone = Arc::clone(&alive);
+        let raw_log = Arc::new(Mutex::new(Vec::new()));
+        let raw_clone = Arc::clone(&raw_log);
         thread::spawn(move || {
             let mut buf = [0u8; 4096];
             loop {
@@ -40,6 +47,13 @@ impl PtySession {
                     Ok(n) => {
                         if let Ok(mut p) = parser_clone.lock() {
                             p.process(&buf[..n]);
+                        }
+                        if let Ok(mut raw) = raw_clone.lock() {
+                            raw.extend_from_slice(&buf[..n]);
+                            if raw.len() > RAW_LOG_CAP {
+                                let excess = raw.len() - RAW_LOG_CAP;
+                                raw.drain(..excess);
+                            }
                         }
                     }
                     Err(_) => break,
@@ -54,6 +68,7 @@ impl PtySession {
             parser,
             child,
             alive,
+            raw_log,
         })
     }
 
@@ -79,6 +94,19 @@ impl PtySession {
 
     pub fn is_alive(&self) -> bool {
         self.alive.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Raw bytes since `cursor` (pane keeps its own cursor). Returns
+    /// `(chunk, next_cursor)`; a stale cursor beyond the (front-truncated)
+    /// buffer resumes at the current end, losing at most one gap.
+    pub fn take_raw_since(&self, cursor: usize) -> (Vec<u8>, usize) {
+        if let Ok(raw) = self.raw_log.lock() {
+            let len = raw.len();
+            let start = cursor.min(len);
+            (raw[start..].to_vec(), len)
+        } else {
+            (Vec::new(), 0)
+        }
     }
 
     pub fn screen_text(&self) -> String {
@@ -114,5 +142,54 @@ impl PtySession {
 impl Drop for PtySession {
     fn drop(&mut self) {
         let _ = self.child.kill();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    fn echo_pty(msg: &str) -> PtySession {
+        let mut cmd = CommandBuilder::new("echo");
+        cmd.arg(msg);
+        PtySession::spawn(cmd, 4, 80).expect("echo pty")
+    }
+
+    fn wait_for<F: Fn() -> bool>(pred: F) -> bool {
+        for _ in 0..100 {
+            if pred() {
+                return true;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        false
+    }
+
+    #[test]
+    fn raw_log_captures_output() {
+        let pty = echo_pty("timeline-marker-a");
+        let saw = wait_for(|| {
+            pty.raw_log
+                .lock()
+                .map(|r| r.windows(17).any(|w| w == b"timeline-marker-a"))
+                .unwrap_or(false)
+        });
+        assert!(saw, "raw log should contain echoed output");
+    }
+
+    #[test]
+    fn take_raw_since_resumes() {
+        let pty = echo_pty("timeline-marker-b");
+        let ready = wait_for(|| !pty.take_raw_since(0).0.is_empty());
+        assert!(ready, "output should arrive");
+
+        let (chunk, cursor) = pty.take_raw_since(0);
+        assert!(chunk.windows(17).any(|w| w == b"timeline-marker-b"));
+        assert!(cursor > 0);
+
+        // Draining again with the stored cursor yields nothing (no dup).
+        let (rest, _next) = pty.take_raw_since(cursor);
+        assert!(rest.is_empty());
     }
 }

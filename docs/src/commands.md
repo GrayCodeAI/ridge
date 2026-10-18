@@ -11,7 +11,7 @@ Type `:` to enter command mode.
 - `export session <file>` — open-pane snapshot as JSON — export cost CSV
 - `account list / add <agent> <name> / env <agent> KEY=VAL / show <agent>`
 - `module list / install <url> [name] / remove <name>` — literally install module scripts
-- `ssh <host> [args]` — open a remote shell pane over SSH
+- `ssh <host> [args]` — open a remote shell pane over SSH (status detection uses the generic heuristics: idle shell prompts, `(y/n)`/permission requests read as blocked)
 - `worktree list / add <branch> / remove <path>` — manage git worktrees
 - `config show / config theme <n> / config notify on|off` — show config, set theme, toggle OS notifications (fires on blocked/finished agents; notify-send on Linux, osascript on macOS)
 - `task add <title>` — add task
@@ -37,6 +37,9 @@ Type `:` to enter command mode.
 - `inbox clear` — empty the inbox
 - `queue <pane_idx> <msg>` — park a prompt for that pane; it is delivered automatically (and recorded in the inbox) the next time the pane blocks on the user
 - `queue list` / `queue drop <id>` / `queue clear` — manage parked prompts
+- `timeline` — list each live pane's session log (path, size, paused flag); logs live under `<data_dir>/timelines/pane-<id>.log`
+- `timeline on|off [pane_idx]` — enable/disable timeline capture (on by default)
+- `timeline export <file>` — copy the active pane's session log into the repo
 - `branch` — show current branch
 - `help` — list commands
 

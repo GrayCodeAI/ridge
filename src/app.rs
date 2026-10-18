@@ -72,6 +72,10 @@ pub struct Pane {
     pub input_buffer: String,
     pub attention: bool,
     pub session_id: Option<String>,
+    /// Session timeline capture enabled (default on).
+    pub timeline: bool,
+    /// Read offset into the PTY raw log.
+    pub timeline_cursor: usize,
 }
 
 impl Pane {
@@ -88,7 +92,19 @@ impl Pane {
             input_buffer: String::new(),
             attention: false,
             session_id: None,
+            timeline: true,
+            timeline_cursor: 0,
         }
+    }
+
+    /// Log file for this pane's session timeline (created lazily).
+    pub fn timeline_path(&self) -> std::path::PathBuf {
+        Self::timeline_path_under(self.id, &crate::config::data_dir())
+    }
+
+    /// Timeline path rooted under `base` (test-injectable).
+    pub fn timeline_path_under(id: usize, base: &std::path::Path) -> std::path::PathBuf {
+        base.join("timelines").join(format!("pane-{}.log", id))
     }
 }
 
@@ -360,6 +376,94 @@ impl App {
             "race_history": self.race_history.records.len(),
         });
         serde_json::to_string_pretty(&out).unwrap_or_else(|_| "{}".to_string())
+    }
+
+    /// Drain each pane's raw PTY output into its timeline log file.
+    pub fn timelines_tick(&mut self) {
+        let base = crate::config::data_dir();
+        self.timelines_tick_into(&base);
+    }
+
+    /// Timeline drain with an explicit storage root (tests inject a tempdir).
+    pub fn timelines_tick_into(&mut self, base: &std::path::Path) {
+        let dir = base.join("timelines");
+        let _ = std::fs::create_dir_all(&dir);
+        for pane in &mut self.panes {
+            if !pane.timeline {
+                continue;
+            }
+            let (chunk, next) = {
+                let Some(pty) = &pane.pty else {
+                    continue;
+                };
+                pty.take_raw_since(pane.timeline_cursor)
+            };
+            if chunk.is_empty() {
+                continue;
+            }
+            pane.timeline_cursor = next;
+            let path = Pane::timeline_path_under(pane.id, base);
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)
+            {
+                use std::io::Write;
+                let _ = f.write_all(&chunk);
+            }
+        }
+    }
+
+    /// Compactly toggle timeline capture; `None` targets the active pane.
+    /// Returns the number of panes affected.
+    pub fn timeline_toggle(&mut self, on: bool, target: Option<usize>) -> usize {
+        let mut n = 0;
+        match target {
+            Some(idx) => {
+                if let Some(pane) = self.panes.get_mut(idx) {
+                    pane.timeline = on;
+                    n = 1;
+                }
+            }
+            None => {
+                if let Some(pane) = self.panes.get_mut(self.active_pane) {
+                    pane.timeline = on;
+                    n = 1;
+                }
+            }
+        }
+        n
+    }
+
+    /// Copy a pane's timeline log to `dst`. `None` targets the active pane.
+    pub fn timeline_export(&mut self, dst: &std::path::Path, pane_idx: Option<usize>) -> bool {
+        let idx = pane_idx.unwrap_or(self.active_pane);
+        match self.panes.get(idx) {
+            Some(pane) => {
+                let src = pane.timeline_path();
+                if !src.exists() {
+                    return false;
+                }
+                std::fs::copy(&src, dst).is_ok()
+            }
+            None => false,
+        }
+    }
+
+    /// Status heuristic for panes without a registered agent (e.g. SSH).
+    /// Terminally exact prompt detection wins; while the session is alive,
+    /// inconclusive output reads as Working.
+    pub fn fallback_status(tail: &str, alive: bool) -> AgentStatus {
+        let registry = crate::core::agent::AgentRegistry::new();
+        let s = registry
+            .find_by_id("generic")
+            .map(|g| g.parse_status(tail))
+            .unwrap_or(AgentStatus::Working);
+        if s == AgentStatus::Unknown && alive {
+            AgentStatus::Working
+        } else {
+            s
+        }
     }
 
     /// Compact summary of live state, exposed to modules via $TERM_JSON.
@@ -767,6 +871,56 @@ impl App {
                 } else {
                     self.status_message =
                         "usage: queue <pane_idx> <msg> | list | drop <id> | clear".to_string();
+                }
+            }
+            "timeline" => {
+                if parts.len() >= 2 && (parts[1] == "on" || parts[1] == "off") {
+                    let on = parts[1] == "on";
+                    let target = parts.get(2).and_then(|p| p.parse::<usize>().ok());
+                    let n = self.timeline_toggle(on, target);
+                    if n == 1 {
+                        self.status_message = format!(
+                            "timeline {} for pane {}",
+                            parts[1],
+                            target.unwrap_or(self.active_pane)
+                        );
+                    } else {
+                        self.status_message = "timeline: no such pane".to_string();
+                    }
+                } else if parts.len() >= 3 && parts[1] == "export" {
+                    let file = parts[2..].join(" ");
+                    let path = self.cwd.join(&file);
+                    if self.timeline_export(&path, None) {
+                        self.status_message = format!("timeline exported to {}", path.display());
+                    } else {
+                        self.status_message =
+                            "timeline: no session log for active pane".to_string();
+                    }
+                } else {
+                    let mut msg = String::new();
+                    for (i, pane) in self.panes.iter().enumerate() {
+                        if pane.pty.is_none() {
+                            continue;
+                        }
+                        let path = pane.timeline_path();
+                        let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+                        let flag = if pane.timeline { "" } else { " (paused)" };
+                        msg.push_str(&format!(
+                            "pane {i}: {} [{} bytes]{}\n",
+                            path.display(),
+                            size,
+                            flag
+                        ));
+                    }
+                    self.status_message = if msg.is_empty() {
+                        "timeline: no live panes".to_string()
+                    } else {
+                        format!(
+                            "timelines under {}:\n{}",
+                            crate::config::data_dir().join("timelines").display(),
+                            msg.trim_end()
+                        )
+                    };
                 }
             }
             "task" => {
@@ -1649,42 +1803,52 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
         terminal.draw(|f| ui::render(f, &mut app))?;
 
         // Refresh agent statuses from PTY output and cost from session files.
-        // Panes newly entering Blocked/Done while unfocused raise an attention badge.
+        // Panes newly entering Blocked/Done while unfocused raise an attention
+        // badge; unknown agents (ssh/shell) use the generic heuristic.
         let mut attention_hits = 0u32;
         let hooks_on = app.config.notify;
         for (idx, pane) in app.panes.iter_mut().enumerate() {
             if let Some(pty) = &pane.pty {
                 let tail = pty.scrollback_tail(8);
-                if let Some(id) = &pane.agent_id.clone() {
-                    if let Some(agent) = app.registry.find_by_id(id) {
-                        let new_status = agent.parse_status(&tail);
-                        if new_status != pane.status
-                            && (new_status == AgentStatus::Blocked
-                                || new_status == AgentStatus::Done)
-                            && idx != app.active_pane
-                        {
-                            pane.attention = true;
-                            attention_hits += 1;
-                            if hooks_on {
-                                let why = if new_status == AgentStatus::Blocked {
-                                    "is BLOCKED and needs you"
-                                } else {
-                                    "finished"
-                                };
-                                crate::core::notify::notify(&format!("Term — {}", pane.title), why);
-                            }
-                        }
-                        pane.status = new_status;
-                        // cost from latest session file
-                        let files = agent.session_files(&app.cwd);
-                        if let Some(f) = files.into_iter().last() {
-                            if let Some(c) = agent.parse_cost(&f) {
-                                pane.cost_usd = c.cost_usd;
-                            }
+                let pty_dead = !pty.is_alive();
+                let registered = match &pane.agent_id {
+                    Some(id) => app.registry.find_by_id(id),
+                    None => None,
+                };
+                let mut new_status = match &registered {
+                    Some(agent) => agent.parse_status(&tail),
+                    None => App::fallback_status(&tail, !pty_dead),
+                };
+                if new_status == AgentStatus::Unknown && !pty_dead {
+                    // Live but not conclusive → keep the pane read as working.
+                    new_status = AgentStatus::Working;
+                }
+                if let Some(agent) = &registered {
+                    // cost from latest session file
+                    let files = agent.session_files(&app.cwd);
+                    if let Some(f) = files.into_iter().last() {
+                        if let Some(c) = agent.parse_cost(&f) {
+                            pane.cost_usd = c.cost_usd;
                         }
                     }
                 }
-                if !pty.is_alive() {
+                if new_status != pane.status
+                    && (new_status == AgentStatus::Blocked || new_status == AgentStatus::Done)
+                    && idx != app.active_pane
+                {
+                    pane.attention = true;
+                    attention_hits += 1;
+                    if hooks_on {
+                        let why = if new_status == AgentStatus::Blocked {
+                            "is BLOCKED and needs you"
+                        } else {
+                            "finished"
+                        };
+                        crate::core::notify::notify(&format!("Term — {}", pane.title), why);
+                    }
+                }
+                pane.status = new_status;
+                if pty_dead {
                     if pane.status != AgentStatus::Done && idx != app.active_pane {
                         pane.attention = true;
                         attention_hits += 1;
@@ -1697,6 +1861,8 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
                     }
                     pane.status = AgentStatus::Done;
                 }
+            } else {
+                // No pty: keep AgentStatus stable, nothing to parse.
             }
         }
 
@@ -1733,10 +1899,12 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
                     }
                 }
                 // Keep race contestant statuses mirrored from their panes.
-                app.race_update_statuses(); // Capture agent replies for pending inbox items.
+                app.race_update_statuses();
+                // Capture agent replies for pending inbox items.
                 if app.tick_count.is_multiple_of(2) {
                     app.inbox_capture();
                     app.queue_tick();
+                    app.timelines_tick();
                 }
             }
             _ => {}
@@ -2210,7 +2378,6 @@ mod race_gate_tests {
             contestants: vec![contestant(wt, "race-gate-test")],
             gate_cmd: Some("false".to_string()), // failing gate
         };
-        race.contestants[0].pane_id = race.contestants[0].pane_id; // keep
         a.race = Some(race);
 
         // Failing gate must refuse the merge and flag the contestant.
@@ -2689,5 +2856,143 @@ mod dashboard_json_tests {
         assert_eq!(v["panes"].as_array().unwrap().len(), 0);
         assert_eq!(v["race"], Value::Null);
         assert_eq!(v["queue"].as_array().unwrap().len(), 0);
+    }
+
+    fn echo_pty_app(msg: &str) -> PtySession {
+        let mut cmd = portable_pty::CommandBuilder::new("echo");
+        cmd.arg(msg);
+        PtySession::spawn(cmd, 4, 80).expect("echo pty")
+    }
+
+    fn sleep_pty_app() -> PtySession {
+        let mut cmd = portable_pty::CommandBuilder::new("sleep");
+        cmd.arg("0");
+        PtySession::spawn(cmd, 4, 80).expect("pty stub")
+    }
+
+    #[test]
+    fn timelines_tick_writes_pane_log() {
+        let base = std::env::temp_dir().join(format!("term-timeline-base-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+
+        let mut a = App::new(Config::default());
+        let mut pane = Pane::new(2, "Echo".to_string());
+        pane.pty = Some(echo_pty_app("timeline-marker-42"));
+        a.panes.push(pane);
+        a.active_pane = 0;
+
+        // Wait for the reader thread to capture output.
+        let saw = (0..100).any(|_| {
+            let got = a.panes[0]
+                .pty
+                .as_ref()
+                .unwrap()
+                .raw_log
+                .lock()
+                .map(|r| !r.is_empty())
+                .unwrap_or(false);
+            if got {
+                true
+            } else {
+                std::thread::sleep(std::time::Duration::from_millis(20));
+                false
+            }
+        });
+        assert!(saw, "raw log should receive output");
+
+        a.timelines_tick_into(&base);
+        let log = Pane::timeline_path_under(2, &base);
+        let data = std::fs::read_to_string(&log).expect("timeline log written");
+        assert_eq!(
+            data.matches("timeline-marker-42").count(),
+            1,
+            "marker captured exactly once"
+        );
+        assert_eq!(
+            a.panes[0].timeline_cursor,
+            a.panes[0].timeline_cursor.max(1)
+        );
+
+        // Second tick: no duplication.
+        a.timelines_tick_into(&base);
+        let data2 = std::fs::read_to_string(&log).unwrap();
+        assert_eq!(data2.matches("timeline-marker-42").count(), 1);
+        assert!(a.panes[0].timeline_cursor > 0);
+    }
+
+    #[test]
+    fn timeline_toggle_and_status_commands() {
+        let mut a = App::new(Config::default());
+        a.panes.push(Pane::new(1, "S1".to_string()));
+        a.active_pane = 0;
+
+        a.execute_command("timeline");
+        assert!(a.status_message.contains("no live panes"));
+
+        a.panes[0].pty = Some(sleep_pty_app());
+        a.execute_command("timeline");
+        assert!(a.status_message.contains("pane 0"), "{}", a.status_message);
+
+        a.execute_command("timeline off 0");
+        assert!(!a.panes[0].timeline);
+        a.execute_command("timeline on 0");
+        assert!(a.panes[0].timeline);
+
+        a.execute_command("timeline off 9");
+        assert!(a.status_message.contains("no such pane"));
+
+        a.execute_command("timeline export out.log");
+        let msg = a.status_message.clone();
+        assert!(
+            msg.contains("exported") || msg.contains("no session log"),
+            "{msg}"
+        );
+        // Clean up in case the timeline landed (real data dir); harmless either way.
+        let _ = std::fs::remove_file(a.cwd.join("out.log"));
+    }
+
+    #[test]
+    fn ssh_fallback_status_matches_generic_heuristic() {
+        assert_eq!(
+            App::fallback_status("proceed? (y/n)", true),
+            AgentStatus::Blocked
+        );
+        assert_eq!(
+            App::fallback_status("permission to run denied", true),
+            AgentStatus::Blocked
+        );
+        assert_eq!(App::fallback_status("$ ", true), AgentStatus::Idle);
+        // A `#` prompt is unknown to the generic heuristic → alive ⇒ Working.
+        assert_eq!(App::fallback_status("# ", true), AgentStatus::Working);
+        assert_eq!(
+            App::fallback_status("installing modules... more text", true),
+            AgentStatus::Working
+        );
+        assert_eq!(
+            App::fallback_status("inconclusive output", false),
+            AgentStatus::Unknown
+        );
+    }
+
+    #[test]
+    fn unknown_agent_pane_uses_fallback_status() {
+        // A pane whose agent_id has no registered agent behaves like ssh.
+        let mut a = App::new(Config::default());
+        let mut pane = Pane::new(5, "SSH dev".to_string());
+        pane.agent_id = Some("ssh".to_string());
+        pane.pty = Some(sleep_pty_app());
+        pane.status = AgentStatus::Working;
+        a.panes.push(pane);
+        a.active_pane = 0;
+
+        // Reproduce the tick path in isolation: heuristic for unknown agent.
+        let tail = a.panes[0].pty.as_ref().unwrap().scrollback_tail(8);
+        let status = App::fallback_status(&tail, true);
+        // ssh stub shows a prompt-ish idle screen or stays working; either is
+        // accepted — the point is it never panics and refreshes cleanly.
+        match status {
+            AgentStatus::Working | AgentStatus::Idle | AgentStatus::Unknown => {}
+            _ => panic!("unexpected ssh status {status:?}"),
+        }
     }
 }

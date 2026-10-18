@@ -733,6 +733,7 @@ Commands\n\
   race <prompt> · race winner <idx> [force] · race gate <idx>
   race leaderboard · race cancel\n\
   inbox · inbox unread · inbox clear\n  queue <pane> <msg> · queue list|drop|clear\n\
+  timeline [on|off <pane>] · timeline export <file>\n\
   task add|start|done|lease|gate|merge|kanban|fanout|from-inbox|check <id> <n>\n\
   session save|clear · export costs|session · account list|add|env|show\n\
   config show|theme · branch · help";
