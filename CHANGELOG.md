@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.7.0
+
+- `term --dashboard`: the full mission-control state as pretty JSON — panes (status/cost/attention/session), race + contestant gate results, queue, inbox counters, task-board summary with ready ids, module count, race-history length
+- OS notification hooks: agents that block, finish, or end their session (while unfocused) fire a desktop notification — `notify-send` on Linux, `osascript` on macOS; `config notify on|off` toggle, no-shell argument vectors (injection-safe)
+- `term --doctor`: environment checks — each agent CLI found on PATH (10 adapters), git/gh availability, writable data dir; report with hints
+- 61 unit tests (dashboard JSON roundtrip + empty state, per-platform notification building/escaping, doctor PATH lookup incl. exec-bit rules)
+
 ## v0.6.0
 
 - Dashboard tab (`7`): single-glance mission-control summary — pane counts (blocked/working/idle/error) with cost, per-pane blocked detail (⚠ attention, `a` jumps), race state (racing / gated / WON BY), queue + inbox counters, task status breakdown with ready-to-start list, module output count; rendered purely from live state (no subprocesses in the draw path)
