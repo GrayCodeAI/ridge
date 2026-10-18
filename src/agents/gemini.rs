@@ -5,6 +5,10 @@ use std::path::{Path, PathBuf};
 pub struct GeminiAgent;
 
 impl Agent for GeminiAgent {
+    /// Executable name for doctor / PATH checks (None = not a real binary).
+    fn exe(&self) -> Option<&'static str> {
+        Some("gemini")
+    }
     fn id(&self) -> &'static str {
         "gemini"
     }

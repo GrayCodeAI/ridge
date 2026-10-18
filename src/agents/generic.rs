@@ -5,6 +5,10 @@ use std::path::{Path, PathBuf};
 pub struct GenericAgent;
 
 impl Agent for GenericAgent {
+    /// Executable name for doctor / PATH checks (None = not a real binary).
+    fn exe(&self) -> Option<&'static str> {
+        None
+    }
     fn id(&self) -> &'static str {
         "generic"
     }

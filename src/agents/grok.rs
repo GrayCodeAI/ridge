@@ -5,6 +5,10 @@ use std::path::{Path, PathBuf};
 pub struct GrokAgent;
 
 impl Agent for GrokAgent {
+    /// Executable name for doctor / PATH checks (None = not a real binary).
+    fn exe(&self) -> Option<&'static str> {
+        Some("grok")
+    }
     fn id(&self) -> &'static str {
         "grok"
     }

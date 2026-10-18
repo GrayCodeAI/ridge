@@ -6,6 +6,10 @@ use std::path::{Path, PathBuf};
 pub struct OpenCodeAgent;
 
 impl Agent for OpenCodeAgent {
+    /// Executable name for doctor / PATH checks (None = not a real binary).
+    fn exe(&self) -> Option<&'static str> {
+        Some("opencode")
+    }
     fn id(&self) -> &'static str {
         "opencode"
     }

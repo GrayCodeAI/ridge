@@ -6,6 +6,10 @@ use std::path::{Path, PathBuf};
 pub struct CodexAgent;
 
 impl Agent for CodexAgent {
+    /// Executable name for doctor / PATH checks (None = not a real binary).
+    fn exe(&self) -> Option<&'static str> {
+        Some("codex")
+    }
     fn id(&self) -> &'static str {
         "codex"
     }

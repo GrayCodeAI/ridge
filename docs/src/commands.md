@@ -43,3 +43,11 @@ Type `:` to enter command mode.
 ## Headless
 
 Run `term --headless` (no TUI) to print machine-readable facts for scripts: registered agents, current branch, `git status` lines, and persisted tasks.
+
+## Dashboard JSON
+
+Run `term --dashboard` (no TUI) to print the full mission-control state as pretty JSON: pane list (status/cost/attention/session id), active race with contestants and gate results, queued prompts, inbox counters, task-board summary with ready ids, module count, and race-history length.
+
+## Doctor
+
+Run `term --doctor` to sanity-check the environment and exit: each agent CLI found on PATH (claude, codex, opencode, gemini, copilot, aider, kimi, pi, grok, cursor-agent), git and gh availability, and that the data dir is writable. Exit code stays 0; missing items are reported with hints.

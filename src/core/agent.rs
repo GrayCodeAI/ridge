@@ -65,6 +65,10 @@ pub trait Agent: Send + Sync {
     fn resume_cmd(&self, session_id: &str, cwd: &Path) -> Option<portable_pty::CommandBuilder>;
     /// Where this agent stores sessions on disk.
     fn session_files(&self, cwd: &Path) -> Vec<PathBuf>;
+    /// Executable name for doctor/PATH checks (None = not a real binary).
+    fn exe(&self) -> Option<&'static str> {
+        None
+    }
     /// Infer status from recent terminal output.
     fn parse_status(&self, output_tail: &str) -> AgentStatus;
     /// Parse cost/token info from a session file.
