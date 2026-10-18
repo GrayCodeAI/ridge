@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.5.0
+
+- Race leaderboard: race outcomes persisted to `<repo>/.term-races.json` (last 50), `:race leaderboard` aggregates wins per agent and lists the three most recent races (with `[forced]` markers)
+- Reply checklists: promoting an inbox reply into a task (`:task from-inbox`) seeds a per-task checklist from `-`/`*` bullet lines; `:task check <id> <n>` toggles items; the board renders `[x]`/`[ ]`
+- Runtime artifacts (`.term-*.json`, `.term-worktrees/`) added to `.gitignore`
+- 54 unit tests (leaderboard cap/sort/roundtrip, checklist derivation/toggle/persistence, `:race leaderboard` + `:task check` command paths)
+
 ## v0.4.0
 
 - Race quality gates (`:race gate <idx>` / `:race winner <idx> [force]` / `:race gate-cmd <cmd>`): winner promotion is gated — `cargo test` by default in Rust worktrees; gate ✓/✗ shown per contestant; `force` overrides
