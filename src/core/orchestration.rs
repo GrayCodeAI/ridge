@@ -255,3 +255,30 @@ mod tests {
         assert!(r.contains("pending"));
     }
 }
+
+#[cfg(test)]
+mod extra_tests {
+    use super::*;
+
+    #[test]
+    fn lease_stores_paths() {
+        let mut board = TaskBoard::new();
+        let id = board.add("t1".into(), vec![], None);
+        board
+            .lease_paths(id, vec![std::path::PathBuf::from("src/main.rs")])
+            .unwrap();
+        assert_eq!(
+            board.tasks[0].leased_paths,
+            vec![std::path::PathBuf::from("src/main.rs")]
+        );
+    }
+
+    #[test]
+    fn kanban_render() {
+        let mut board = TaskBoard::new();
+        board.add("a".into(), vec![], None);
+        let k = board.render_kanban();
+        assert!(k.contains("Pending"));
+        assert!(k.contains("a"));
+    }
+}
