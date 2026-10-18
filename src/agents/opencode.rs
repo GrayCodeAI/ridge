@@ -1,5 +1,6 @@
 use crate::core::agent::{Agent, AgentStatus, CostInfo};
 use portable_pty::CommandBuilder;
+use serde_json;
 use std::path::{Path, PathBuf};
 
 pub struct OpenCodeAgent;
@@ -55,8 +56,28 @@ impl Agent for OpenCodeAgent {
         }
         AgentStatus::Unknown
     }
-    fn parse_cost(&self, _session_file: &Path) -> Option<CostInfo> {
-        None
+    fn parse_cost(&self, session_file: &Path) -> Option<CostInfo> {
+        let raw = std::fs::read_to_string(session_file).ok()?;
+        let mut cost = CostInfo::default();
+        for line in raw.lines() {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(line) {
+                if let Some(usage) = v.get("usage") {
+                    cost.input_tokens += usage
+                        .get("input")
+                        .or_else(|| usage.get("input_tokens"))
+                        .and_then(|x| x.as_u64())
+                        .unwrap_or(0);
+                    cost.output_tokens += usage
+                        .get("output")
+                        .or_else(|| usage.get("output_tokens"))
+                        .and_then(|x| x.as_u64())
+                        .unwrap_or(0);
+                }
+            }
+        }
+        cost.cost_usd = (cost.input_tokens as f64 / 1_000_000.0) * 3.0
+            + (cost.output_tokens as f64 / 1_000_000.0) * 15.0;
+        Some(cost)
     }
 }
 
