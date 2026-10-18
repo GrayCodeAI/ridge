@@ -78,8 +78,14 @@ impl Agent for ClaudeAgent {
         for line in raw.lines() {
             if let Ok(v) = serde_json::from_str::<serde_json::Value>(line) {
                 if let Some(usage) = v.get("message").and_then(|m| m.get("usage")) {
-                    cost.input_tokens += usage.get("input_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
-                    cost.output_tokens += usage.get("output_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
+                    cost.input_tokens += usage
+                        .get("input_tokens")
+                        .and_then(|x| x.as_u64())
+                        .unwrap_or(0);
+                    cost.output_tokens += usage
+                        .get("output_tokens")
+                        .and_then(|x| x.as_u64())
+                        .unwrap_or(0);
                 }
             }
         }

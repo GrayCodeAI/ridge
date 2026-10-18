@@ -1,11 +1,11 @@
 use crate::app::{App, Tab};
 use crate::core::agent::AgentStatus;
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph, Tabs},
-    Frame,
 };
 
 pub fn render(f: &mut Frame, app: &mut App) {
@@ -17,7 +17,11 @@ pub fn render(f: &mut Frame, app: &mut App) {
         return;
     }
 
-    let extra = if app.command_mode || app.delegate_mode || app.search_mode { 1 } else { 0 };
+    let extra = if app.command_mode || app.delegate_mode || app.search_mode {
+        1
+    } else {
+        0
+    };
     let mut constraints = vec![Constraint::Length(3), Constraint::Min(0)];
     if extra == 1 {
         constraints.push(Constraint::Length(1));
@@ -48,13 +52,16 @@ pub fn render(f: &mut Frame, app: &mut App) {
 fn render_mobile(f: &mut Frame, app: &mut App, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(2), Constraint::Min(0), Constraint::Length(1)])
+        .constraints([
+            Constraint::Length(2),
+            Constraint::Min(0),
+            Constraint::Length(1),
+        ])
         .split(area);
 
     let header = Paragraph::new(format!(
         " Term mobile | pane {} | {} ",
-        app.active_pane,
-        app.status_message
+        app.active_pane, app.status_message
     ))
     .style(Style::default().fg(Color::Cyan));
     f.render_widget(header, chunks[0]);
@@ -101,16 +108,15 @@ fn theme_accent(theme: &str) -> Color {
 fn render_tabs(f: &mut Frame, app: &App, area: Rect) {
     let accent = theme_accent(&app.config.theme);
     let titles: Vec<Line> = Tab::ALL.iter().map(|t| Line::from(t.title())).collect();
-    let selected = Tab::ALL.iter().position(|t| *t == app.current_tab).unwrap_or(0);
+    let selected = Tab::ALL
+        .iter()
+        .position(|t| *t == app.current_tab)
+        .unwrap_or(0);
     let tabs = Tabs::new(titles)
         .block(Block::default().borders(Borders::ALL).title(" Term "))
         .select(selected)
         .style(Style::default().fg(Color::White))
-        .highlight_style(
-            Style::default()
-                .fg(accent)
-                .add_modifier(Modifier::BOLD),
-        );
+        .highlight_style(Style::default().fg(accent).add_modifier(Modifier::BOLD));
     f.render_widget(tabs, area);
 }
 
@@ -216,7 +222,11 @@ fn render_git(f: &mut Frame, app: &App, area: Rect) {
     let text = format!(
         "Branch: {}\n\nStatus:\n{}\n\nRecent commits:\n{}\n\nPull requests:\n{}",
         branch,
-        if status.is_empty() { "(clean)".to_string() } else { status },
+        if status.is_empty() {
+            "(clean)".to_string()
+        } else {
+            status
+        },
         log,
         prs
     );
@@ -236,10 +246,26 @@ fn render_diff(f: &mut Frame, app: &App, area: Rect) {
 
     let text = format!(
         "=== Staged ===\n{}\n\n=== Worktree ===\n{}\n\n=== Untracked ===\n{}\n\n=== Conflicted ===\n{}",
-        if staged.is_empty() { "(none)".to_string() } else { staged },
-        if worktree.is_empty() { "(none)".to_string() } else { worktree },
-        if untracked.is_empty() { "(none)".to_string() } else { untracked },
-        if conflicted.is_empty() { "(none)".to_string() } else { conflicted }
+        if staged.is_empty() {
+            "(none)".to_string()
+        } else {
+            staged
+        },
+        if worktree.is_empty() {
+            "(none)".to_string()
+        } else {
+            worktree
+        },
+        if untracked.is_empty() {
+            "(none)".to_string()
+        } else {
+            untracked
+        },
+        if conflicted.is_empty() {
+            "(none)".to_string()
+        } else {
+            conflicted
+        }
     );
     let para = Paragraph::new(text).style(Style::default().fg(Color::White));
     f.render_widget(para, inner);
@@ -262,7 +288,9 @@ fn render_files(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_orchestration(f: &mut Frame, app: &App, area: Rect) {
-    let block = Block::default().borders(Borders::ALL).title(" Orchestration ");
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Orchestration ");
     let inner = block.inner(area);
     f.render_widget(block, area);
 

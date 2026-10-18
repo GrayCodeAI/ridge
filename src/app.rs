@@ -7,9 +7,9 @@ use crate::ui;
 use anyhow::Result;
 use crossterm::{
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{Terminal, backend::CrosstermBackend};
 use std::io;
 use std::time::Duration;
 
@@ -473,7 +473,10 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
             }
         }
         (KeyCode::Char('r'), _) => {
-            let info = app.active_pane().and_then(|p| p.agent_id.clone()).map(|id| (id, app.cwd.clone()));
+            let info = app
+                .active_pane()
+                .and_then(|p| p.agent_id.clone())
+                .map(|id| (id, app.cwd.clone()));
             if let Some((id, cwd)) = info {
                 let agent = app.registry.find_by_id(&id);
                 if let Some(agent) = agent {
@@ -499,7 +502,10 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
             }
         }
         (KeyCode::Char('f'), _) => {
-            let info = app.active_pane().and_then(|p| p.agent_id.clone()).map(|id| (id, app.cwd.clone()));
+            let info = app
+                .active_pane()
+                .and_then(|p| p.agent_id.clone())
+                .map(|id| (id, app.cwd.clone()));
             if let Some((id, cwd)) = info {
                 app.spawn_agent(&id, cwd);
                 app.status_message = "session forked".to_string();

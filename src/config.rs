@@ -66,7 +66,10 @@ pub fn data_dir() -> PathBuf {
         return PathBuf::from(xdg).join("term");
     }
     if let Ok(home) = std::env::var("HOME") {
-        return PathBuf::from(home).join(".local").join("share").join("term");
+        return PathBuf::from(home)
+            .join(".local")
+            .join("share")
+            .join("term");
     }
     PathBuf::from(".local").join("share").join("term")
 }
