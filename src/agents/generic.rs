@@ -16,7 +16,10 @@ impl Agent for GenericAgent {
         true
     }
     fn spawn_cmd(&self, cwd: &Path) -> CommandBuilder {
-        // Default to a shell; user overrides via config later.
+        // Shell differs per OS; user overrides via config later.
+        #[cfg(windows)]
+        let mut cmd = CommandBuilder::new("cmd");
+        #[cfg(not(windows))]
         let mut cmd = CommandBuilder::new("bash");
         cmd.cwd(cwd);
         cmd

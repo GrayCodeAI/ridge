@@ -10,6 +10,8 @@ Type `:` to enter command mode.
 - `export costs` — cost CSV
 - `export session <file>` — open-pane snapshot as JSON — export cost CSV
 - `account list / add <agent> <name> / env <agent> KEY=VAL / show <agent>`
+- `module list / install <url> [name] / remove <name>` — literally install module scripts
+- `ssh <host> [args]` — open a remote shell pane over SSH
 - `config show / config theme <n>`
 - `task add <title>` — add task
 - `task start <id> [agent]` — start task (creates worktree)
