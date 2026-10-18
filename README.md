@@ -51,4 +51,3 @@ Agents (panes + status), Git, Diff, Files, Orchestration, Settings
 ## License
 
 MIT
-EOF

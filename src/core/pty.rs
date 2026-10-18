@@ -110,4 +110,3 @@ impl PtySession {
         lines[start..].join("\n")
     }
 }
-EOF

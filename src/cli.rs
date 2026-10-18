@@ -11,4 +11,3 @@ pub struct Cli {
     #[arg(long)]
     pub headless: bool,
 }
-EOF

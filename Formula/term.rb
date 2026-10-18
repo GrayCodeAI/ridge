@@ -16,4 +16,3 @@ class Term < Formula
     assert_match "term", shell_output("#{bin}/term --version")
   end
 end
-EOF

@@ -83,4 +83,3 @@ pub fn gh_issues(cwd: &Path) -> String {
         Err(_) => "gh CLI not available".to_string(),
     }
 }
-EOF

@@ -313,4 +313,3 @@ fn render_status(f: &mut Frame, app: &App, area: Rect) {
     let para = Paragraph::new(line);
     f.render_widget(para, area);
 }
-EOF

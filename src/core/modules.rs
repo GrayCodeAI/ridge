@@ -37,4 +37,3 @@ pub fn run_module(path: &PathBuf) -> (String, String) {
 pub fn run_all() -> Vec<(String, String)> {
     discover().into_iter().map(|p| run_module(&p)).collect()
 }
-EOF

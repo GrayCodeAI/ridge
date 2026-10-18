@@ -5,4 +5,3 @@ pub mod orchestration;
 pub mod pty;
 pub mod session;
 pub mod worktree;
-EOF

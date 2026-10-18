@@ -43,4 +43,3 @@ pub fn remove_worktree(repo: &Path, path: &Path) -> Result<(), String> {
 pub fn worktree_base(repo: &Path) -> PathBuf {
     repo.join(".term-worktrees")
 }
-EOF

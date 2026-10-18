@@ -41,4 +41,3 @@ impl Agent for GenericAgent {
         None
     }
 }
-EOF

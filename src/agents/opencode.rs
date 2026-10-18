@@ -69,4 +69,3 @@ fn collect(dir: &Path, out: &mut Vec<PathBuf>) {
         }
     }
 }
-EOF
