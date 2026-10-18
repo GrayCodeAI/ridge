@@ -4,6 +4,7 @@ pub mod inbox;
 pub mod modules;
 pub mod orchestration;
 pub mod pty;
+pub mod queue;
 pub mod race;
 pub mod session;
 pub mod worktree;

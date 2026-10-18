@@ -605,14 +605,20 @@ fn render_orchestration(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(block, area);
 
     let text = format!(
-        "Task board:\n\n{}\n\nKanban:\n{}\n\nReady: {:?}\n\nRace:\n{}\nCommands:\n  :task add <title>\n  :task start <id> [agent]\n  :task done <id>\n  :task lease <id> <paths...>\n  :task gate <id>\n  :task merge <id>\n  :task kanban\n  :task fanout <prompt>\n  :task from-inbox <n> — promote a captured reply into a task\n  :race <prompt> — fan a prompt to claude/codex/opencode in worktrees\n  :race gate <idx> · :race winner <idx> [force] · :race cancel\n  :delegate <pane> <msg>",
+        "Task board:\n\n{}\n\nKanban:\n{}\n\nReady: {:?}\n\nRace:\n{}\n\nQueue:\n{}\nCommands:\n  :task add <title>\n  :task start <id> [agent]\n  :task done <id>\n  :task lease <id> <paths...>\n  :task gate <id>\n  :task merge <id>\n  :task kanban\n  :task fanout <prompt>\n  :task from-inbox <n> — promote a captured reply into a task\n  :race <prompt> — fan a prompt to claude/codex/opencode in worktrees\n  :race gate <idx> · :race winner <idx> [force] · :race cancel\n  :queue <pane> <msg> — deliver next time that pane blocks\n  :queue list|drop <id>|clear\n  :delegate <pane> <msg>",
         app.task_board.render(),
         app.task_board.render_kanban(),
         app.task_board.ready_tasks(),
         app.race
             .as_ref()
             .map(|r| r.render())
-            .unwrap_or_else(|| "  (none — start with :race <prompt>)\n".to_string())
+            .unwrap_or_else(|| "  (none — start with :race <prompt>)\n".to_string()),
+        app.queue
+            .render()
+            .lines()
+            .map(|l| format!("  {l}"))
+            .collect::<Vec<_>>()
+            .join("\n")
     );
     let para = Paragraph::new(text).style(Style::default().fg(Color::White));
     f.render_widget(para, inner);
@@ -711,7 +717,7 @@ const HELP_TEXT: &str = "Keybindings\n\
 Commands\n\
   spawn <agent> · close · delegate <pane> <msg> · broadcast <msg>\n\
   race <prompt> · race winner <idx> [force] · race gate <idx> · race cancel\n\
-  inbox · inbox unread · inbox clear\n\
+  inbox · inbox unread · inbox clear\n  queue <pane> <msg> · queue list|drop|clear\n\
   task add|start|done|lease|gate|merge|kanban|fanout|from-inbox\n\
   session save|clear · export costs|session · account list|add|env|show\n\
   config show|theme · branch · help";

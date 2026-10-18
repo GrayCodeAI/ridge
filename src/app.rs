@@ -3,6 +3,7 @@ use crate::config::Config;
 use crate::core::agent::{AgentRegistry, AgentStatus};
 use crate::core::inbox::Inbox;
 use crate::core::pty::PtySession;
+use crate::core::queue::Queue;
 use crate::event::{Event, EventHandler};
 use crate::ui;
 use anyhow::Result;
@@ -124,6 +125,8 @@ pub struct App {
 
     /// Inter-session reply inbox (delegations + captured agent replies).
     pub inbox: crate::core::inbox::Inbox,
+    /// Wait-for-human queue: prompts delivered when the agent blocks.
+    pub queue: crate::core::queue::Queue,
     /// Inbox overlay currently shown.
     pub show_inbox: bool,
 
@@ -161,6 +164,7 @@ impl App {
             module_outputs: Vec::new(),
             inbox: crate::core::inbox::Inbox::new(),
             show_inbox: false,
+            queue: crate::core::queue::Queue::new(),
             diff_scroll: 0,
             files_scroll: 0,
             diff_sections: vec![
@@ -528,6 +532,39 @@ impl App {
                     self.status_message = format!("unread replies: {n}");
                 } else {
                     self.inbox_toggle();
+                }
+            }
+            "queue" => {
+                if parts.len() >= 3 && parts[1] == "drop" {
+                    if let Ok(id) = parts[2].parse::<u64>() {
+                        if self.queue.drop(id) {
+                            self.status_message = format!("queue #{id} dropped");
+                        } else {
+                            self.status_message = format!("queue: no entry #{id}");
+                        }
+                    } else {
+                        self.status_message = "usage: queue drop <id>".to_string();
+                    }
+                } else if parts.len() >= 2 && parts[1] == "list" {
+                    self.status_message = if self.queue.items.is_empty() {
+                        "queue: empty".to_string()
+                    } else {
+                        self.queue.render()
+                    };
+                } else if parts.len() >= 2 && parts[1] == "clear" {
+                    self.queue.clear();
+                    self.status_message = "queue cleared".to_string();
+                } else if parts.len() >= 3 {
+                    if let Ok(pane_idx) = parts[1].parse::<usize>() {
+                        let msg = parts[2..].join(" ");
+                        self.queue_enqueue(pane_idx, &msg);
+                    } else {
+                        self.status_message =
+                            "usage: queue <pane_idx> <msg> | list | drop <id> | clear".to_string();
+                    }
+                } else {
+                    self.status_message =
+                        "usage: queue <pane_idx> <msg> | list | drop <id> | clear".to_string();
                 }
             }
             "task" => {
@@ -1137,6 +1174,64 @@ impl App {
             self.status_message = "inbox — o/Esc closes".to_string();
         }
     }
+
+    /// Park a prompt for a pane: delivered automatically next time it blocks.
+    pub fn queue_enqueue(&mut self, pane_idx: usize, msg: &str) {
+        if pane_idx >= self.panes.len() {
+            self.status_message = format!("queue: no pane index {pane_idx}");
+            return;
+        }
+        let (pane_id, title, has_pty) = {
+            let p = &self.panes[pane_idx];
+            (p.id, p.title.clone(), p.pty.is_some())
+        };
+        if !has_pty {
+            self.status_message = format!("queue: pane {pane_id} has no live process");
+            return;
+        }
+        let id = self.queue.push(pane_id, &title, msg);
+        self.status_message =
+            format!("queued #{id} for pane {pane_id} — fires when it blocks (:queue list)");
+    }
+
+    /// Deliver queued prompts for panes that are now blocked on the user.
+    pub fn queue_tick(&mut self) {
+        if self.queue.items.is_empty() {
+            return;
+        }
+        // Drop stale prompts whose pane no longer exists.
+        let stale: Vec<u64> = self
+            .queue
+            .items
+            .iter()
+            .filter(|i| !self.panes.iter().any(|p| p.id == i.pane_id))
+            .map(|i| i.id)
+            .collect();
+        for qid in stale {
+            self.queue.drop(qid);
+            self.status_message = format!("queue #{qid} dropped (pane gone)");
+        }
+        let mut delivered: Vec<(u64, usize, String)> = Vec::new();
+        for item in self.queue.items.iter() {
+            if let Some(p) = self.panes.iter().find(|p| p.id == item.pane_id) {
+                if p.pty.is_some() && Queue::ready(p.status) {
+                    delivered.push((item.id, p.id, item.msg.clone()));
+                }
+            }
+        }
+        for (qid, pane_id, msg) in delivered {
+            let idx = self.panes.iter().position(|p| p.id == pane_id);
+            if let Some(idx) = idx {
+                self.delegate_to_pane_recorded(idx, &msg);
+                self.queue.drop(qid);
+                self.status_message =
+                    format!("queue #{qid} delivered to {}", self.panes[idx].title);
+            } else {
+                // Pane gone — drop the stale prompt.
+                self.queue.drop(qid);
+            }
+        }
+    }
 }
 
 /// Parse an inline delegation buffer typed at a pane prompt.
@@ -1353,10 +1448,10 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
                     }
                 }
                 // Keep race contestant statuses mirrored from their panes.
-                app.race_update_statuses();
-                // Capture agent replies for pending inbox items.
+                app.race_update_statuses(); // Capture agent replies for pending inbox items.
                 if app.tick_count.is_multiple_of(2) {
                     app.inbox_capture();
+                    app.queue_tick();
                 }
             }
             _ => {}
@@ -1905,5 +2000,87 @@ mod race_gate_tests {
         a.race_gate(7);
         assert!(a.status_message.contains("invalid contestant"));
         let _ = std::fs::remove_dir_all(&app_cwd);
+    }
+}
+
+#[cfg(test)]
+mod queue_tests {
+    use super::*;
+    use crate::config::Config;
+    use crate::core::agent::AgentStatus;
+    use crate::core::queue::{Queue, QueuedPrompt};
+
+    #[test]
+    fn queue_list_and_enqueue_command() {
+        let mut a = App::new(Config::default());
+        a.execute_command("queue 0 add more tests");
+        // No panes yet — invalid index, nothing queued.
+        assert!(a.queue.items.is_empty());
+
+        let mut pane = Pane::new(1, "Claude #1".to_string());
+        pane.pty = None; // even with a pane, no pty → rejected
+        a.panes.push(pane);
+        a.execute_command("queue 0 add more tests");
+        assert!(a.queue.items.is_empty());
+
+        a.panes[0].pty = Some(pty_stub());
+        a.execute_command("queue 0 add more tests");
+        assert_eq!(a.queue.items.len(), 1);
+        assert_eq!(a.queue.items[0].msg, "add more tests");
+        a.execute_command("queue list");
+        assert!(a.status_message.contains("add more tests"));
+        a.execute_command("queue clear");
+        assert!(a.queue.items.is_empty());
+    }
+
+    /// A PtySession backed by /bin/echo for tests needing a live handle.
+    fn pty_stub() -> PtySession {
+        let mut cmd = portable_pty::CommandBuilder::new("sleep");
+        cmd.arg("0");
+        PtySession::spawn(cmd, 4, 80).expect("pty stub")
+    }
+
+    #[test]
+    fn queue_tick_delivers_only_when_blocked() {
+        let mut a = App::new(Config::default());
+        let pane = Pane::new(1, "Claude #1".to_string());
+        a.panes.push(pane);
+
+        // Queue struct-level: pane idle → not ready.
+        assert!(!Queue::ready(a.panes[0].status));
+
+        // Simulate parked prompt; tick with non-blocked pane → not delivered.
+        a.queue.items.push(QueuedPrompt {
+            id: a.queue.next_id + 1,
+            pane_id: 1,
+            pane_title: "Claude #1".to_string(),
+            msg: "approve".to_string(),
+        });
+        a.queue_tick();
+        assert_eq!(a.queue.items.len(), 1);
+
+        // Blocked without pty → not deliverable (no live process).
+        a.panes[0].status = AgentStatus::Blocked;
+        a.queue_tick();
+        assert_eq!(a.queue.items.len(), 1, "no private delivery without pty");
+
+        // With pty + blocked → delivered and recorded in the inbox.
+        a.panes[0].pty = Some(pty_stub());
+        a.queue_tick();
+        assert!(a.queue.items.is_empty(), "delivered");
+        assert_eq!(a.inbox.items.len(), 1);
+    }
+
+    #[test]
+    fn stale_prompt_dropped_when_pane_gone() {
+        let mut a = App::new(Config::default());
+        a.queue.items.push(QueuedPrompt {
+            id: a.queue.next_id + 1,
+            pane_id: 42,
+            pane_title: "gone".to_string(),
+            msg: "m".to_string(),
+        });
+        a.queue_tick();
+        assert!(a.queue.items.is_empty());
     }
 }
