@@ -124,3 +124,31 @@ impl Default for AgentRegistry {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn registry_has_claude() {
+        let r = AgentRegistry::new();
+        assert!(r.find_by_id("claude").is_some());
+        assert!(r.find_by_id("nonexistent").is_none());
+    }
+
+    #[test]
+    fn registry_detects_claude() {
+        let r = AgentRegistry::new();
+        let a = r.detect("claude", "claude --resume");
+        assert!(a.is_some());
+        assert_eq!(a.unwrap().id(), "claude");
+    }
+
+    #[test]
+    fn generic_fallback() {
+        let r = AgentRegistry::new();
+        // generic registered last; detect on unknown process falls through to generic
+        let a = r.detect("some-unknown-binary", "foo bar");
+        assert!(a.is_some());
+    }
+}
