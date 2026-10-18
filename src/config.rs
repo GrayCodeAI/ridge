@@ -9,12 +9,33 @@ pub struct Account {
     pub env: std::collections::BTreeMap<String, String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub theme: String,
     pub keybindings: Keybindings,
     pub accounts: Vec<Account>,
     pub active_account: std::collections::BTreeMap<String, String>,
+    /// Fire OS notifications when agents block or finish (needs
+    /// notify-send on Linux / osascript on macOS).
+    #[serde(default = "default_notify")]
+    pub notify: bool,
+}
+
+/// Old configs (missing the key) treat notifications as enabled.
+fn default_notify() -> bool {
+    true
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            theme: String::new(),
+            keybindings: Keybindings::default(),
+            accounts: Vec::new(),
+            active_account: std::collections::BTreeMap::new(),
+            notify: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

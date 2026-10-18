@@ -2,6 +2,7 @@ pub mod agent;
 pub mod git;
 pub mod inbox;
 pub mod modules;
+pub mod notify;
 pub mod orchestration;
 pub mod pty;
 pub mod queue;
