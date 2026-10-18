@@ -122,6 +122,8 @@ pub struct App {
     pub module_outputs: Vec<(String, String)>,
 
     pub task_board: crate::core::orchestration::TaskBoard,
+    /// Active fan-out race (each contestant works in its own worktree).
+    pub race: Option<crate::core::race::Race>,
     pub cwd: std::path::PathBuf,
 }
 
@@ -164,6 +166,7 @@ impl App {
             task_board: crate::core::orchestration::TaskBoard::load(
                 &std::env::current_dir().unwrap_or_default(),
             ),
+            race: None,
             cwd: std::env::current_dir().unwrap_or_default(),
         };
         app.module_outputs = crate::core::modules::run_all(&app.module_state_json());
@@ -236,7 +239,15 @@ impl App {
         if self.panes.is_empty() {
             return;
         }
-        let idx = self.active_pane;
+        let pane_id = self.panes[self.active_pane].id;
+        self.close_pane_by_id(pane_id);
+    }
+
+    /// Close a pane by its stable id (used by race cleanup and normal close).
+    pub fn close_pane_by_id(&mut self, pane_id: usize) {
+        let Some(idx) = self.panes.iter().position(|p| p.id == pane_id) else {
+            return;
+        };
         if let Some(p) = self.panes.get(idx) {
             if let Some(pty) = &p.pty {
                 let _ = pty.write(b"\x03"); // Ctrl+C
@@ -248,6 +259,124 @@ impl App {
         }
         self.split_bottom = None;
         self.status_message = "pane closed".to_string();
+    }
+
+    // ---- Fan-out race ------------------------------------------------------
+
+    const RACE_AGENTS: [&'static str; 3] = ["claude", "codex", "opencode"];
+
+    /// Start a race: spawn one agent per contestant, each in its own git
+    /// worktree with the same prompt delegated to it. Cancels any prior race.
+    pub fn race_start(&mut self, prompt: &str) {
+        self.race_cancel();
+        let mut race = crate::core::race::Race {
+            prompt: prompt.to_string(),
+            contestants: Vec::new(),
+        };
+        for agent_id in Self::RACE_AGENTS {
+            if self.registry.find_by_id(agent_id).is_none() {
+                continue;
+            }
+            let tag = self.next_pane_id; // unique per contestant
+            let branch = format!("race-{tag}-{agent_id}");
+            let base = crate::core::worktree::worktree_base(&self.cwd);
+            let wt = base.join(&branch);
+            match crate::core::worktree::create_worktree(&self.cwd, &branch, &wt) {
+                Ok(()) => {
+                    self.spawn_agent(agent_id, wt.clone(), None);
+                    let pane_id = self.panes.last().map(|p| p.id).unwrap_or(tag);
+                    race.contestants.push(crate::core::race::RaceContestant {
+                        agent_id: agent_id.to_string(),
+                        pane_id,
+                        branch,
+                        worktree: wt,
+                        status: Some(crate::core::agent::AgentStatus::Working),
+                        winner: false,
+                        promoted: false,
+                    });
+                    // Delegate the race prompt to the contestant right away.
+                    if let Some(pane) = self.panes.last() {
+                        if let Some(pty) = &pane.pty {
+                            let _ = pty.write(prompt.as_bytes());
+                            let _ = pty.write(b"\r");
+                        }
+                    }
+                }
+                Err(e) => {
+                    self.status_message = format!("race: {agent_id} worktree failed: {e}");
+                }
+            }
+        }
+        let n = race.contestants.len();
+        if n == 0 {
+            self.status_message = "race: no agents available".to_string();
+        } else {
+            self.status_message = format!("race started: {n} agents racing \"{prompt}\"");
+            self.race = Some(race);
+        }
+    }
+
+    /// Terminate every contestant pane and remove its worktree. Idempotent.
+    pub fn race_cancel(&mut self) {
+        let Some(race) = self.race.take() else {
+            return;
+        };
+        for c in race.contestants {
+            self.close_pane_by_id(c.pane_id);
+            let _ = crate::core::worktree::remove_worktree(&self.cwd, &c.worktree);
+        }
+        self.status_message = "race cancelled".to_string();
+    }
+
+    /// Refresh contestant statuses from their panes (called each tick).
+    pub fn race_update_statuses(&mut self) {
+        if let Some(race) = &mut self.race {
+            for c in race.contestants.iter_mut() {
+                if c.promoted {
+                    continue;
+                }
+                c.status = self
+                    .panes
+                    .iter()
+                    .find(|p| p.id == c.pane_id)
+                    .map(|p| p.status);
+            }
+        }
+    }
+
+    /// Promote contestant `idx`: merge its branch, close + clean up the rest.
+    pub fn race_winner(&mut self, idx: usize) {
+        let Some(race) = &self.race else {
+            self.status_message = "race: no active race".to_string();
+            return;
+        };
+        if idx >= race.contestants.len() {
+            self.status_message = format!("race: invalid contestant {idx}");
+            return;
+        }
+        let branch = race.contestants[idx].branch.clone();
+        match crate::core::worktree::merge_branch(&self.cwd, &branch) {
+            Ok(()) => {
+                let losers: Vec<(usize, std::path::PathBuf)> = race
+                    .contestants
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, _)| *i != idx && !race.contestants[*i].promoted)
+                    .map(|(_, c)| (c.pane_id, c.worktree.clone()))
+                    .collect();
+                for (pane_id, wt) in losers {
+                    self.close_pane_by_id(pane_id);
+                    let _ = crate::core::worktree::remove_worktree(&self.cwd, &wt);
+                }
+                let winner = &mut self.race.as_mut().expect("checked above").contestants[idx];
+                winner.winner = true;
+                winner.promoted = true;
+                winner.status = Some(crate::core::agent::AgentStatus::Done);
+                self.status_message =
+                    format!("race winner: {} — branch {branch} merged", winner.agent_id);
+            }
+            Err(e) => self.status_message = format!("race merge failed: {e}"),
+        }
     }
 
     pub fn execute_command(&mut self, cmd: &str) {
@@ -602,6 +731,32 @@ impl App {
                 } else {
                     self.status_message =
                         "usage: worktree list | add <branch> | remove <path>".to_string();
+                }
+            }
+            "race" => {
+                if parts.len() >= 2 && parts[1] == "status" {
+                    self.status_message = self
+                        .race
+                        .as_ref()
+                        .map(|r| r.render())
+                        .unwrap_or_else(|| "no active race".to_string());
+                } else if parts.len() >= 3 && parts[1] == "winner" {
+                    if let Ok(i) = parts[2].parse::<usize>() {
+                        self.race_winner(i);
+                    } else {
+                        self.status_message = "usage: race winner <idx>".to_string();
+                    }
+                } else if parts.len() >= 2 && parts[1] == "cancel" {
+                    self.race_cancel();
+                } else if parts.len() >= 2 {
+                    let prompt = parts[1..].join(" ");
+                    self.race_start(&prompt);
+                } else {
+                    self.status_message = self
+                        .race
+                        .as_ref()
+                        .map(|r| r.render())
+                        .unwrap_or_else(|| "no active race".to_string());
                 }
             }
             "ssh" => {
@@ -987,6 +1142,8 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
                         app.refresh_files_cache();
                     }
                 }
+                // Keep race contestant statuses mirrored from their panes.
+                app.race_update_statuses();
             }
             _ => {}
         }

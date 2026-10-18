@@ -54,6 +54,24 @@ pub fn worktree_base(repo: &Path) -> PathBuf {
     repo.join(".term-worktrees")
 }
 
+/// Merge `branch` into the current branch (used to promote a race winner).
+pub fn merge_branch(repo: &Path, branch: &str) -> Result<(), String> {
+    if branch.is_empty() || branch.contains("..") {
+        return Err("invalid branch name".into());
+    }
+    let out = Command::new("git")
+        .args(["merge", "--no-ff"])
+        .arg(branch)
+        .current_dir(repo)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).to_string())
+    }
+}
+
 #[cfg(test)]
 mod validation_tests {
     use super::*;

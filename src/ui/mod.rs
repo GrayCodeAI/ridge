@@ -545,10 +545,14 @@ fn render_orchestration(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(block, area);
 
     let text = format!(
-        "Task board:\n\n{}\n\nKanban:\n{}\n\nReady: {:?}\n\nCommands:\n  :task add <title>\n  :task start <id> [agent]\n  :task done <id>\n  :task lease <id> <paths...>\n  :task gate <id>\n  :task merge <id>\n  :task kanban\n  :task fanout <prompt>\n  :delegate <pane> <msg>",
+        "Task board:\n\n{}\n\nKanban:\n{}\n\nReady: {:?}\n\nRace:\n{}\nCommands:\n  :task add <title>\n  :task start <id> [agent]\n  :task done <id>\n  :task lease <id> <paths...>\n  :task gate <id>\n  :task merge <id>\n  :task kanban\n  :task fanout <prompt>\n  :race <prompt> — fan a prompt to claude/codex/opencode in worktrees\n  :race winner <idx>\n  :race cancel\n  :delegate <pane> <msg>",
         app.task_board.render(),
         app.task_board.render_kanban(),
-        app.task_board.ready_tasks()
+        app.task_board.ready_tasks(),
+        app.race
+            .as_ref()
+            .map(|r| r.render())
+            .unwrap_or_else(|| "  (none — start with :race <prompt>)\n".to_string())
     );
     let para = Paragraph::new(text).style(Style::default().fg(Color::White));
     f.render_widget(para, inner);
@@ -646,6 +650,7 @@ const HELP_TEXT: &str = "Keybindings\n\
   ?  toggle this help     Esc  close prompt/overlay\n\n\
 Commands\n\
   spawn <agent> · close · delegate <pane> <msg> · broadcast <msg>\n\
+  race <prompt> · race winner <idx> · race cancel\n\
   task add|start|done|lease|gate|merge|kanban|fanout\n\
   session save|clear · export costs|session · account list|add|env|show\n\
   config show|theme · branch · help";
