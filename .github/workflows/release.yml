@@ -69,3 +69,32 @@ jobs:
         with:
           files: term-*
           generate_release_notes: true
+
+
+  update-homebrew:
+    name: Update Homebrew Tap
+    needs: release
+    runs-on: ubuntu-latest
+    if: ${{ secrets.HOMEBREW_TAP_TOKEN != '' }}
+    steps:
+      - name: Checkout tap
+        uses: actions/checkout@v4
+        with:
+          repository: GrayCodeAI/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+      - name: Compute SHA256
+        id: sha
+        run: |
+          SHA=$(curl -sL https://github.com/GrayCodeAI/term/archive/refs/tags/${{ github.ref_name }}.tar.gz | sha256sum | awk '{print $1}')
+          echo "sha=$SHA" >> $GITHUB_OUTPUT
+      - name: Update formula
+        run: |
+          cd tap
+          sed -i 's/sha256 ".*"/sha256 "${{ steps.sha.outputs.sha }}"/' Formula/term.rb
+          sed -i 's#url ".*"#url "https://github.com/GrayCodeAI/term/archive/refs/tags/${{ github.ref_name }}.tar.gz"#' Formula/term.rb
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add Formula/term.rb
+          git commit -m "chore: update term to ${{ github.ref_name }}" || echo "no changes"
+          git push
