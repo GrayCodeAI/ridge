@@ -11,6 +11,14 @@ pub struct Cli {
     #[arg(long)]
     pub headless: bool,
 
+    /// Print the dashboard state as human-readable JSON and exit (no TUI).
+    #[arg(long)]
+    pub dashboard: bool,
+
+    /// Run environment checks (agents on PATH, git/gh, data dir) and exit.
+    #[arg(long)]
+    pub doctor: bool,
+
     /// Restore panes from the previously saved session.
     #[arg(long)]
     pub restore: bool,
