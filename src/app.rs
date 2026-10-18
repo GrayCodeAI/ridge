@@ -1592,6 +1592,12 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
         return Ok(());
     }
 
+    if cli.doctor {
+        tracing::info!("doctor mode");
+        crate::core::doctor::run_cli_checks();
+        return Ok(());
+    }
+
     if cli.headless {
         // No TUI: print machine-readable facts about this machine's agents.
         // Note: tracing writes to a file, stdout stays clean for scripting.

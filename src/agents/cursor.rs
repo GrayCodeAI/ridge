@@ -5,6 +5,10 @@ use std::path::{Path, PathBuf};
 pub struct CursorAgent;
 
 impl Agent for CursorAgent {
+    /// Executable name for doctor / PATH checks (None = not a real binary).
+    fn exe(&self) -> Option<&'static str> {
+        Some("cursor-agent")
+    }
     fn id(&self) -> &'static str {
         "cursor"
     }

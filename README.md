@@ -16,6 +16,12 @@ Full mission control: 11 agent adapters (Claude, Codex, OpenCode, Gemini, Copilo
 
 /md book site under `docs/` (mdBook) — built in CI; open `docs/book/index.html` or run `mdbook build docs` locally.
 
+## Scripting & diagnostics
+
+- `term --headless` — machine-readable agent/branch/status/task facts
+- `term --dashboard` — full mission-control state as JSON
+- `term --doctor` — check which agent CLIs / tools are installed
+
 ## Build
 
 ```sh

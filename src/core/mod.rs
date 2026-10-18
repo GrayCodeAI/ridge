@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod doctor;
 pub mod git;
 pub mod inbox;
 pub mod modules;

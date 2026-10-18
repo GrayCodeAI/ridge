@@ -5,6 +5,10 @@ use std::path::{Path, PathBuf};
 pub struct ClaudeAgent;
 
 impl Agent for ClaudeAgent {
+    /// Executable name for doctor / PATH checks (None = not a real binary).
+    fn exe(&self) -> Option<&'static str> {
+        Some("claude")
+    }
     fn id(&self) -> &'static str {
         "claude"
     }

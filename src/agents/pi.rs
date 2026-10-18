@@ -5,6 +5,10 @@ use std::path::{Path, PathBuf};
 pub struct PiAgent;
 
 impl Agent for PiAgent {
+    /// Executable name for doctor / PATH checks (None = not a real binary).
+    fn exe(&self) -> Option<&'static str> {
+        Some("pi")
+    }
     fn id(&self) -> &'static str {
         "pi"
     }
