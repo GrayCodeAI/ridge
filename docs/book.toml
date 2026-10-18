@@ -1,0 +1,10 @@
+[book]
+title = "Term — Mission Control for AI Agents"
+authors = ["GrayCodeAI"]
+description = "Terminal-native TUI mission control for coding agents."
+
+[build]
+build-dir = "book"
+
+[output.html]
+default-theme = "rust"

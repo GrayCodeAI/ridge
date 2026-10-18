@@ -69,3 +69,35 @@ jobs:
         with:
           files: term-*
           generate_release_notes: true
+
+  # Updates the Homebrew tap formula after a release. Runs only when the
+  # HOMEBREW_TAP_TOKEN secret is configured (mapped to env for the `if`).
+  update-tap:
+    name: Update Homebrew Tap
+    needs: release
+    runs-on: ubuntu-latest
+    env:
+      TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      TAG_NAME: ${{ github.ref_name }}
+    steps:
+      - name: Has token?
+        id: guard
+        if: env.TAP_TOKEN != ''
+        run: echo "present=1" >> "$GITHUB_OUTPUT"
+      - if: steps.guard.outputs.present == '1'
+        uses: actions/checkout@v4
+        with:
+          repository: GrayCodeAI/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+      - if: steps.guard.outputs.present == '1'
+        name: Update formula
+        run: |
+          SHA=$(curl -fsSL "https://github.com/GrayCodeAI/term/archive/refs/tags/${TAG_NAME}.tar.gz" | sha256sum | awk '{print $1}')
+          cd tap
+          sed -i "s#url \".*\"#url \"https://github.com/GrayCodeAI/term/archive/refs/tags/${TAG_NAME}.tar.gz\"#" Formula/term.rb
+          sed -i "s/sha256 \".*\"/sha256 \"${SHA}\"/" Formula/term.rb
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git commit -am "chore: update term to ${TAG_NAME}" || echo "no changes"
+          git push

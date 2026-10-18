@@ -31,3 +31,11 @@ jobs:
         run: cargo build --release
       - name: Test
         run: cargo test
+      - name: Docs build (mdBook)
+        if: runner.os == 'Linux'
+        uses: peaceiris/actions-mdbook@v2
+        with:
+          mdbook-version: 'latest'
+      - name: mdBook build
+        if: runner.os == 'Linux'
+        run: mdbook build docs
