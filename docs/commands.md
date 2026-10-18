@@ -20,3 +20,7 @@ Type `:` to enter command mode.
 - `task subagent <parent> <agent>` — spawn subagent
 - `branch` — show current branch
 - `help` — list commands
+
+## Headless
+
+Run `term --headless` (no TUI) to print machine-readable facts for scripts: registered agents, current branch, `git status` lines, and persisted tasks.

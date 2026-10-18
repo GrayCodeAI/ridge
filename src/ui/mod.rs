@@ -181,6 +181,10 @@ fn render_agents(f: &mut Frame, app: &App, area: Rect) {
                     Span::raw(" "),
                     Span::styled(p.status.label(), Style::default().fg(status_color)),
                     Span::styled(cost_str, Style::default().fg(Color::Magenta)),
+                    Span::styled(
+                        if p.attention { "  ⚠" } else { "" },
+                        Style::default().fg(Color::Red),
+                    ),
                 ]);
                 ListItem::new(line)
             })

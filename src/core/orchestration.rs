@@ -47,6 +47,25 @@ impl TaskBoard {
         Self::default()
     }
 
+    /// Persist the board to `<repo>/.term-tasks.json`.
+    pub fn save(&self, repo: &Path) -> Result<(), String> {
+        let path = repo.join(".term-tasks.json");
+        let json = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
+        std::fs::write(&path, json).map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Load a board from `<repo>/.term-tasks.json`, or a fresh one.
+    pub fn load(repo: &Path) -> TaskBoard {
+        let path = repo.join(".term-tasks.json");
+        if let Ok(s) = std::fs::read_to_string(&path) {
+            if let Ok(board) = serde_json::from_str::<TaskBoard>(&s) {
+                return board;
+            }
+        }
+        TaskBoard::new()
+    }
+
     pub fn add(&mut self, title: String, deps: Vec<u64>, gate: Option<String>) -> u64 {
         self.next_id += 1;
         let id = self.next_id;
