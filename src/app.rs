@@ -580,6 +580,30 @@ impl App {
                         "usage: module list | install <url> [name] | remove <name>".to_string();
                 }
             }
+            "worktree" => {
+                if parts.len() >= 2 && parts[1] == "list" {
+                    self.status_message = crate::core::worktree::list_worktrees(&self.cwd);
+                } else if parts.len() >= 3 && parts[1] == "add" {
+                    let branch = parts[2].to_string();
+                    let base = crate::core::worktree::worktree_base(&self.cwd);
+                    let path = base.join(&branch);
+                    match crate::core::worktree::create_worktree(&self.cwd, &branch, &path) {
+                        Ok(()) => {
+                            self.status_message = format!("worktree added at {}", path.display())
+                        }
+                        Err(e) => self.status_message = format!("worktree add failed: {e}"),
+                    }
+                } else if parts.len() >= 3 && parts[1] == "remove" {
+                    let path = std::path::PathBuf::from(parts[2]);
+                    match crate::core::worktree::remove_worktree(&self.cwd, &path) {
+                        Ok(()) => self.status_message = format!("worktree removed: {}", parts[2]),
+                        Err(e) => self.status_message = format!("worktree remove failed: {e}"),
+                    }
+                } else {
+                    self.status_message =
+                        "usage: worktree list | add <branch> | remove <path>".to_string();
+                }
+            }
             "ssh" => {
                 if parts.len() >= 2 {
                     let host = parts[1].to_string();
@@ -610,7 +634,7 @@ impl App {
             }
             "help" => {
                 self.status_message =
-                    "commands: spawn <agent>, close, delegate <pane> <msg>, broadcast <msg>, session save/clear, export costs/session, module list/install <url> [name]/remove <name>, ssh <host>, account list/add/env/show, config show/theme, task add/start/done/lease/gate/merge/filter/kanban/fanout, branch".to_string();
+                    "commands: spawn <agent>, close, delegate <pane> <msg>, broadcast <msg>, session save/clear, export costs/session, module list/install <url> [name]/remove <name>, ssh <host>, account list/add/env/show, config show/theme, task add/start/done/lease/gate/merge/filter/kanban/fanout, worktree list/add/remove, branch".to_string();
             }
             other => {
                 self.status_message = format!("unknown command: {other}");
