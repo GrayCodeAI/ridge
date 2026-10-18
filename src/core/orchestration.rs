@@ -33,6 +33,7 @@ pub struct Task {
     pub branch: Option<String>,
     pub quality_gate: Option<String>,
     pub pane_id: Option<usize>,
+    pub leased_paths: Vec<PathBuf>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -58,6 +59,7 @@ impl TaskBoard {
             branch: None,
             quality_gate: gate,
             pane_id: None,
+            leased_paths: Vec::new(),
         });
         id
     }
@@ -107,15 +109,90 @@ impl TaskBoard {
         }
     }
 
+    /// Lease paths for a task. Returns Err if any path is already leased by another running task.
+    pub fn lease_paths(&mut self, id: u64, paths: Vec<PathBuf>) -> Result<(), String> {
+        // check conflicts
+        for p in &paths {
+            for t in &self.tasks {
+                if t.id != id && t.status == TaskStatus::Running && t.leased_paths.contains(p) {
+                    return Err(format!(
+                        "path {} already leased by task {}",
+                        p.display(),
+                        t.id
+                    ));
+                }
+            }
+        }
+        if let Some(t) = self.tasks.iter_mut().find(|t| t.id == id) {
+            t.leased_paths = paths;
+            Ok(())
+        } else {
+            Err("task not found".into())
+        }
+    }
+
+    /// Run the quality gate command in the task's worktree. Returns Ok(true) on success.
+    pub fn run_quality_gate(&self, id: u64) -> Result<bool, String> {
+        let task = self.tasks.iter().find(|t| t.id == id).ok_or("not found")?;
+        let wt = task.worktree.as_ref().ok_or("no worktree")?;
+        let gate = task.quality_gate.as_ref().ok_or("no quality gate set")?;
+        let out = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(gate)
+            .current_dir(wt)
+            .output()
+            .map_err(|e| e.to_string())?;
+        Ok(out.status.success())
+    }
+
+    /// Merge the task's branch into the repo's current branch via a dedicated merge worktree.
+    pub fn merge_task(&mut self, id: u64, repo: &Path) -> Result<(), String> {
+        let (branch, wt) = {
+            let task = self.tasks.iter().find(|t| t.id == id).ok_or("not found")?;
+            if task.status != TaskStatus::Done {
+                return Err("task not done".into());
+            }
+            (
+                task.branch.clone().ok_or("no branch")?,
+                task.worktree.clone(),
+            )
+        };
+        // merge the task branch into current HEAD
+        let out = std::process::Command::new("git")
+            .args(["merge", "--no-ff", &branch])
+            .current_dir(repo)
+            .output()
+            .map_err(|e| e.to_string())?;
+        if !out.status.success() {
+            return Err(String::from_utf8_lossy(&out.stderr).to_string());
+        }
+        // clean up worktree
+        if let Some(w) = wt {
+            let _ = crate::core::worktree::remove_worktree(repo, &w);
+        }
+        if let Some(t) = self.tasks.iter_mut().find(|t| t.id == id) {
+            t.worktree = None;
+        }
+        Ok(())
+    }
+
     pub fn render(&self) -> String {
         let mut out = String::new();
         for t in &self.tasks {
+            let leases = if t.leased_paths.is_empty() {
+                String::new()
+            } else {
+                format!(" leases: {:?}", t.leased_paths)
+            };
+            let gate = t.quality_gate.as_deref().unwrap_or("-");
             out.push_str(&format!(
-                "[{}] #{} {} (deps: {:?})\n",
+                "[{}] #{} {} (deps: {:?}, gate: {}){}\n",
                 t.status.label(),
                 t.id,
                 t.title,
-                t.deps
+                t.deps,
+                gate,
+                leases
             ));
         }
         out
