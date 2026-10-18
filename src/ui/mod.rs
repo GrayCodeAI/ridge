@@ -51,6 +51,66 @@ pub fn render(f: &mut Frame, app: &mut App) {
     if app.show_help {
         render_help(f, size);
     }
+    if app.show_inbox {
+        render_inbox(f, app, size);
+    }
+}
+
+/// Inbox overlay: captured replies from delegated prompts, newest first.
+fn render_inbox(f: &mut Frame, app: &App, area: Rect) {
+    let popup = centered_rect(66, 80, area);
+    f.render_widget(Clear, popup);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Inbox reply capture — o/Esc to close ");
+    let inner = block.inner(popup);
+    f.render_widget(block, popup);
+
+    let unread = app.inbox.unread_count();
+    let mut lines: Vec<String> = vec![format!(
+        "{} unread / {} total — o or Esc closes; :inbox clear empties",
+        unread,
+        app.inbox.items.len()
+    )];
+    for (i, item) in app.inbox.items.iter().enumerate().rev() {
+        let dot = if item.arrived && !item.read {
+            "●"
+        } else if item.arrived {
+            "○"
+        } else {
+            "·"
+        };
+        let reply = if item.arrived {
+            if item.reply.is_empty() {
+                "(empty)".to_string()
+            } else {
+                item.reply.chars().take(86).collect()
+            }
+        } else {
+            "waiting…".to_string()
+        };
+        lines.push(format!(
+            "[{}] {} {} → {}",
+            i + 1,
+            dot,
+            item.pane_title,
+            reply
+        ));
+        lines.push(format!(
+            "    prompt: {}",
+            item.prompt.chars().take(90).collect::<String>()
+        ));
+    }
+    if app.inbox.items.is_empty() {
+        lines.push(
+            "Nothing here yet. Delegate with =<pane> <msg> or :delegate <pane> <msg> —\
+            replies are captured when the agent blocks or finishes."
+                .to_string(),
+        );
+    }
+    let text = lines.join("\n");
+    let para = Paragraph::new(text).style(Style::default().fg(Color::White));
+    f.render_widget(para, inner);
 }
 
 fn render_mobile(f: &mut Frame, app: &mut App, area: Rect) {
@@ -644,13 +704,14 @@ const HELP_TEXT: &str = "Keybindings\n\
   q / Ctrl+C  quit        Tab / ← →   switch tab\n\
   1-6  jump to tab        n  spawn Claude     x  close pane\n\
   r  resume session       f  fork session     a  next blocked\n\
-  [ ]  switch pane        j  k  scroll (Diff/Files)\n\
+  [ ]  switch pane        o  reply inbox      j  k  scroll\n\
   n / p  next/prev hunk (Diff)\n\
   :  command mode         =  delegate         /  search\n\
   ?  toggle this help     Esc  close prompt/overlay\n\n\
 Commands\n\
   spawn <agent> · close · delegate <pane> <msg> · broadcast <msg>\n\
   race <prompt> · race winner <idx> · race cancel\n\
+  inbox · inbox unread · inbox clear\n\
   task add|start|done|lease|gate|merge|kanban|fanout\n\
   session save|clear · export costs|session · account list|add|env|show\n\
   config show|theme · branch · help";

@@ -1,6 +1,7 @@
 use crate::cli::Cli;
 use crate::config::Config;
 use crate::core::agent::{AgentRegistry, AgentStatus};
+use crate::core::inbox::Inbox;
 use crate::core::pty::PtySession;
 use crate::event::{Event, EventHandler};
 use crate::ui;
@@ -121,6 +122,11 @@ pub struct App {
 
     pub module_outputs: Vec<(String, String)>,
 
+    /// Inter-session reply inbox (delegations + captured agent replies).
+    pub inbox: crate::core::inbox::Inbox,
+    /// Inbox overlay currently shown.
+    pub show_inbox: bool,
+
     pub task_board: crate::core::orchestration::TaskBoard,
     /// Active fan-out race (each contestant works in its own worktree).
     pub race: Option<crate::core::race::Race>,
@@ -153,6 +159,8 @@ impl App {
             split_bottom: None,
 
             module_outputs: Vec::new(),
+            inbox: crate::core::inbox::Inbox::new(),
+            show_inbox: false,
             diff_scroll: 0,
             files_scroll: 0,
             diff_sections: vec![
@@ -411,14 +419,22 @@ impl App {
                 if parts.len() >= 3 {
                     if let Ok(idx) = parts[1].parse::<usize>() {
                         let msg = parts[2..].join(" ");
-                        if let Some(pane) = self.panes.get(idx) {
-                            if let Some(pty) = &pane.pty {
-                                let _ = pty.write(msg.as_bytes());
-                                let _ = pty.write(b"\r");
-                                self.status_message = format!("delegated to pane {idx}");
-                            }
-                        }
+                        self.delegate_to_pane_recorded(idx, &msg);
+                        self.status_message =
+                            format!("delegated to pane {idx} (reply goes to :inbox)");
                     }
+                }
+            }
+            "inbox" => {
+                if parts.len() >= 2 && parts[1] == "clear" {
+                    self.inbox.clear();
+                    self.show_inbox = false;
+                    self.status_message = "inbox cleared".to_string();
+                } else if parts.len() >= 2 && parts[1] == "unread" {
+                    let n = self.inbox.unread_count();
+                    self.status_message = format!("unread replies: {n}");
+                } else {
+                    self.inbox_toggle();
                 }
             }
             "task" => {
@@ -561,9 +577,12 @@ impl App {
                 } else if parts.len() >= 2 && parts[1] == "broadcast" {
                     let msg = parts[2..].join(" ");
                     for i in 0..self.panes.len() {
-                        self.delegate_to_pane(i, &msg);
+                        self.delegate_to_pane_recorded(i, &msg);
                     }
-                    self.status_message = format!("broadcast to {} panes", self.panes.len());
+                    self.status_message = format!(
+                        "broadcast to {} panes (replies land in :inbox)",
+                        self.panes.len()
+                    );
                 } else if parts.len() >= 4 && parts[1] == "lease" {
                     if let Ok(id) = parts[2].parse::<u64>() {
                         let paths: Vec<std::path::PathBuf> =
@@ -927,6 +946,70 @@ impl App {
             }
         }
     }
+
+    /// Delegate to a pane and record the prompt in the reply inbox.
+    pub fn delegate_to_pane_recorded(&mut self, idx: usize, msg: &str) {
+        let (pane_id, title) = match self.panes.get(idx) {
+            Some(p) => (p.id, p.title.clone()),
+            None => return,
+        };
+        self.delegate_to_pane(idx, msg);
+        self.inbox.send(pane_id, &title, msg);
+    }
+
+    /// Capture replies for pending inbox items whose pane blocked/done/errored.
+    pub fn inbox_capture(&mut self) {
+        let pending: Vec<u64> = self
+            .inbox
+            .items
+            .iter()
+            .filter(|i| !i.arrived)
+            .map(|i| i.id)
+            .collect();
+        for id in pending {
+            let status_and_tail = self
+                .panes
+                .iter()
+                .find(|p| {
+                    self.inbox
+                        .items
+                        .iter()
+                        .any(|i| i.id == id && i.pane_id == p.id)
+                })
+                .map(|p| {
+                    (
+                        p.status,
+                        p.pty
+                            .as_ref()
+                            .map(|pty| pty.scrollback_tail(6))
+                            .unwrap_or_default(),
+                    )
+                });
+            if let Some((status, tail)) = status_and_tail {
+                if Inbox::reply_ready(status, false) {
+                    if let Some(item) = self.inbox.items.iter_mut().find(|i| i.id == id) {
+                        item.arrived = true;
+                        item.read = false;
+                        item.reply = tail
+                            .lines()
+                            .rev()
+                            .find(|l| !l.trim().is_empty())
+                            .unwrap_or_default()
+                            .to_string();
+                    }
+                }
+            }
+        }
+    }
+
+    /// Open (or toggle) the inbox overlay; opening marks replies as read.
+    pub fn inbox_toggle(&mut self) {
+        self.show_inbox = !self.show_inbox;
+        self.inbox.mark_all_read();
+        if self.show_inbox {
+            self.status_message = "inbox — o/Esc closes".to_string();
+        }
+    }
 }
 
 /// Parse an inline delegation buffer typed at a pane prompt.
@@ -1144,6 +1227,10 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
                 }
                 // Keep race contestant statuses mirrored from their panes.
                 app.race_update_statuses();
+                // Capture agent replies for pending inbox items.
+                if app.tick_count.is_multiple_of(2) {
+                    app.inbox_capture();
+                }
             }
             _ => {}
         }
@@ -1216,7 +1303,7 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
                 let pane_tok = parts.next().unwrap_or("").trim();
                 let msg = parts.next().unwrap_or("").trim();
                 if let Ok(idx) = pane_tok.parse::<usize>() {
-                    app.delegate_to_pane(idx, msg);
+                    app.delegate_to_pane_recorded(idx, msg);
                     app.status_message = format!("delegated to pane {idx}");
                 } else {
                     // try pane title match
@@ -1260,7 +1347,11 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
 
     match (key.code, key.modifiers) {
         (KeyCode::Char('?'), _) => app.show_help = !app.show_help,
-        (KeyCode::Esc, _) => app.show_help = false,
+        (KeyCode::Char('o'), _) => app.inbox_toggle(),
+        (KeyCode::Esc, _) => {
+            app.show_help = false;
+            app.show_inbox = false;
+        }
         (KeyCode::Char('q'), _) => app.should_quit = true,
         (KeyCode::Char('c'), KeyModifiers::CONTROL) => app.should_quit = true,
         (KeyCode::Tab, _) => app.current_tab = app.current_tab.next(),
@@ -1460,8 +1551,8 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
                 .active_pane()
                 .and_then(|p| parse_inline_delegate(&p.input_buffer));
             if let Some((idx, msg)) = delegated {
-                app.delegate_to_pane(idx, &msg);
-                app.status_message = format!("delegated to pane {}", idx);
+                app.delegate_to_pane_recorded(idx, &msg);
+                app.status_message = format!("delegated to pane {} (reply goes to :inbox)", idx);
             } else if let Some(pane) = app.active_pane_mut() {
                 if let Some(pty) = &pane.pty {
                     let _ = pty.write(b"\r");
