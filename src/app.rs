@@ -76,6 +76,10 @@ pub struct Pane {
     pub timeline: bool,
     /// Read offset into the PTY raw log.
     pub timeline_cursor: usize,
+    /// Epoch-ms of the last index record written to the companion meta file.
+    pub timeline_mark_ms: u128,
+    /// Byte offset of the last index record.
+    pub timeline_mark_bytes: u128,
 }
 
 impl Pane {
@@ -94,6 +98,8 @@ impl Pane {
             session_id: None,
             timeline: true,
             timeline_cursor: 0,
+            timeline_mark_ms: 0,
+            timeline_mark_bytes: 0,
         }
     }
 
@@ -105,6 +111,28 @@ impl Pane {
     /// Timeline path rooted under `base` (test-injectable).
     pub fn timeline_path_under(id: usize, base: &std::path::Path) -> std::path::PathBuf {
         base.join("timelines").join(format!("pane-{}.log", id))
+    }
+
+    /// Companion index for timestamped post-mortems: one `epoch_ms bytes`
+    /// line per recording milestone (activity threshold or 30 s idle).
+    pub fn timeline_meta_path(&self) -> std::path::PathBuf {
+        Self::timeline_meta_path_under(self.id, &crate::config::data_dir())
+    }
+
+    /// Meta path rooted under `base` (test-injectable).
+    pub fn timeline_meta_path_under(id: usize, base: &std::path::Path) -> std::path::PathBuf {
+        base.join("timelines").join(format!("pane-{}.meta", id))
+    }
+
+    /// Last `epoch_ms bytes` record from a meta file, if any.
+    pub fn last_meta_record(id: usize, base: &std::path::Path) -> Option<(u128, u128)> {
+        let path = Self::timeline_meta_path_under(id, base);
+        let data = std::fs::read_to_string(path).ok()?;
+        let line = data.lines().next_back()?.trim();
+        let mut parts = line.split_whitespace();
+        let ms = parts.next()?.parse().ok()?;
+        let bytes = parts.next()?.parse().ok()?;
+        Some((ms, bytes))
     }
 }
 
@@ -411,6 +439,28 @@ impl App {
                 use std::io::Write;
                 let _ = f.write_all(&chunk);
             }
+
+            // Timestamp the write in the companion meta file when the pane
+            // has pushed enough bytes (4 KiB) or gone quiet for 30s.
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0);
+            let delta = pane.timeline_cursor as u128 - pane.timeline_mark_bytes;
+            let elapsed = now.saturating_sub(pane.timeline_mark_ms);
+            if delta >= 4096 || elapsed >= 30_000 {
+                let meta = Pane::timeline_meta_path_under(pane.id, base);
+                if let Ok(mut f) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&meta)
+                {
+                    use std::io::Write;
+                    let _ = writeln!(f, "{now} {}", pane.timeline_cursor);
+                }
+                pane.timeline_mark_ms = now;
+                pane.timeline_mark_bytes = pane.timeline_cursor as u128;
+            }
         }
     }
 
@@ -447,6 +497,60 @@ impl App {
                 std::fs::copy(&src, dst).is_ok()
             }
             None => false,
+        }
+    }
+
+    /// Open a replay pane for a pane's session log (uses the real data dir).
+    pub fn timeline_view(&mut self, pane_idx: usize) -> Result<(), String> {
+        let base = crate::config::data_dir();
+        self.timeline_view_at(pane_idx, &base)
+    }
+
+    /// Replay-pane core with an injectable storage root (tests).
+    /// Unix rides `tail -n +1 -f` so the replay auto-follows; on Windows the
+    /// viewer is a static `type` snapshot (no builtin follow).
+    pub fn timeline_view_at(
+        &mut self,
+        pane_idx: usize,
+        base: &std::path::Path,
+    ) -> Result<(), String> {
+        let Some(pane) = self.panes.get(pane_idx) else {
+            return Err(format!("no pane {pane_idx}"));
+        };
+        let src = Pane::timeline_path_under(pane.id, base);
+        let title_win = pane.title.lines().next().unwrap_or("?").to_string();
+        if !src.exists() {
+            return Err(format!("pane {pane_idx} has no session log yet"));
+        }
+        #[cfg(windows)]
+        let mut cmd = {
+            let mut c = portable_pty::CommandBuilder::new("cmd");
+            c.arg("/c");
+            c.arg(format!("type \"{}\"", src.display()));
+            c
+        };
+        #[cfg(not(windows))]
+        let mut cmd = {
+            let mut c = portable_pty::CommandBuilder::new("tail");
+            c.arg("-n");
+            c.arg("+1");
+            c.arg("-f");
+            c.arg(src.clone());
+            c
+        };
+        let _ = &mut cmd;
+        match PtySession::spawn(cmd, 24, 80) {
+            Ok(pty) => {
+                let id = self.next_pane_id;
+                self.next_pane_id += 1;
+                let mut vp = Pane::new(id, format!("⏵ replay: {title_win}"));
+                vp.pty = Some(pty);
+                self.panes.push(vp);
+                self.active_pane = self.panes.len().saturating_sub(1);
+                self.status_message = format!("replaying {} timeline ({})", pane_idx, id);
+                Ok(())
+            }
+            Err(e) => Err(format!("replay spawn failed: {e}")),
         }
     }
 
@@ -887,6 +991,13 @@ impl App {
                     } else {
                         self.status_message = "timeline: no such pane".to_string();
                     }
+                } else if parts.len() >= 2 && parts[1] == "view" {
+                    let idx = parts.get(2).and_then(|p| p.parse::<usize>().ok());
+                    let idx = idx.unwrap_or(self.active_pane);
+                    match self.timeline_view(idx) {
+                        Ok(()) => {}
+                        Err(e) => self.status_message = format!("timeline: {e}"),
+                    }
                 } else if parts.len() >= 3 && parts[1] == "export" {
                     let file = parts[2..].join(" ");
                     let path = self.cwd.join(&file);
@@ -905,11 +1016,22 @@ impl App {
                         let path = pane.timeline_path();
                         let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
                         let flag = if pane.timeline { "" } else { " (paused)" };
+                        let idle = Pane::last_meta_record(pane.id, &crate::config::data_dir())
+                            .map(|(ms, _)| {
+                                let now = std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .map(|d| d.as_millis())
+                                    .unwrap_or(ms);
+                                let secs = now.saturating_sub(ms) / 1000;
+                                format!(" · idle {secs}s")
+                            })
+                            .unwrap_or_default();
                         msg.push_str(&format!(
-                            "pane {i}: {} [{} bytes]{}\n",
+                            "pane {i}: {} [{} bytes]{}{}\n",
                             path.display(),
                             size,
-                            flag
+                            flag,
+                            idle
                         ));
                     }
                     self.status_message = if msg.is_empty() {
@@ -1748,7 +1870,7 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
 
     if cli.doctor {
         tracing::info!("doctor mode");
-        crate::core::doctor::run_cli_checks();
+        crate::core::doctor::run_cli_checks(cli.fix);
         return Ok(());
     }
 
@@ -2935,6 +3057,18 @@ mod dashboard_json_tests {
         assert_eq!(read_count(), 1, "marker captured exactly once");
         assert!(a.panes[0].timeline_cursor > 0);
 
+        // Companion meta file: timestamped byte-offset milestones.
+        let meta = Pane::timeline_meta_path_under(2, &base);
+        let meta_data = std::fs::read_to_string(&meta).expect("meta written on first delta");
+        let last = meta_data.lines().next_back().unwrap();
+        let mut parts = last.split_whitespace();
+        let (_ms, bytes): (u128, u128) = (
+            parts.next().unwrap().parse().unwrap(),
+            parts.next().unwrap().parse().unwrap(),
+        );
+        assert_eq!(bytes, a.panes[0].timeline_cursor as u128);
+        assert!(Pane::last_meta_record(2, &base).is_some());
+
         // Further ticks never duplicate content.
         a.timelines_tick_into(&base);
         assert_eq!(read_count(), 1, "no duplication on repeat ticks");
@@ -2992,6 +3126,68 @@ mod dashboard_json_tests {
             App::fallback_status("inconclusive output", false),
             AgentStatus::Unknown
         );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn timeline_view_opens_replaying_pane() {
+        let base = std::env::temp_dir().join(format!("term-timeline-view-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+
+        let mut a = App::new(Config::default());
+        a.panes.push(Pane::new(3, "SSH dev".to_string()));
+        a.active_pane = 0;
+
+        // No log yet → friendly error, no pane spawned.
+        match a.timeline_view_at(0, &base) {
+            Err(e) => assert!(e.contains("no session log"), "{e}"),
+            Ok(()) => panic!("view should fail without a log"),
+        }
+
+        // Write a log manually, then view it.
+        std::fs::create_dir_all(base.join("timelines")).unwrap();
+        std::fs::write(Pane::timeline_path_under(3, &base), "hello-timeline-view\n").unwrap();
+        a.timeline_view_at(0, &base).expect("replay pane");
+
+        assert_eq!(a.panes.len(), 2);
+        assert_eq!(a.active_pane, 1);
+        assert!(a.panes[1].title.contains("replay"));
+        assert!(a.panes[1].agent_id.is_none());
+
+        // The replay PTY prints the whole log then keeps following.
+        let saw = (0..100).any(|_| {
+            let got = a.panes[1]
+                .pty
+                .as_ref()
+                .unwrap()
+                .raw_log
+                .lock()
+                .map(|raw| raw.windows(19).any(|w| w == b"hello-timeline-view"))
+                .unwrap_or(false);
+            if got {
+                true
+            } else {
+                std::thread::sleep(std::time::Duration::from_millis(20));
+                false
+            }
+        });
+        assert!(saw, "replay pane should display the timeline");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn timeline_view_command_reports_errors() {
+        let mut a = App::new(Config::default());
+        a.panes.push(Pane::new(4, "S".to_string()));
+        a.active_pane = 0;
+        a.execute_command("timeline view 0");
+        assert!(
+            a.status_message.contains("no session log"),
+            "{}",
+            a.status_message
+        );
+        a.execute_command("timeline view 42");
+        assert!(a.status_message.contains("no pane"), "{}", a.status_message);
     }
 
     #[test]

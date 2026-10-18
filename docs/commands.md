@@ -37,8 +37,9 @@ Type `:` to enter command mode.
 - `inbox clear` — empty the inbox
 - `queue <pane_idx> <msg>` — park a prompt for that pane; it is delivered automatically (and recorded in the inbox) the next time the pane blocks on the user
 - `queue list` / `queue drop <id>` / `queue clear` — manage parked prompts
-- `timeline` — list each live pane's session log (path, size, paused flag); logs live under `<data_dir>/timelines/pane-<id>.log`
+- `timeline` — list each live pane's session log (path, size, paused flag, seconds idleness); logs live under `<data_dir>/timelines/pane-<id>.log`
 - `timeline on|off [pane_idx]` — enable/disable timeline capture (on by default)
+- `timeline view [pane_idx]` — open a replay pane that scrolls the pane's session log and auto-follows new output (unix)
 - `timeline export <file>` — copy the active pane's session log into the repo
 - `branch` — show current branch
 - `help` — list commands
@@ -53,4 +54,15 @@ Run `term --dashboard` (no TUI) to print the full mission-control state as prett
 
 ## Doctor
 
-Run `term --doctor` to sanity-check the environment and exit: each agent CLI found on PATH (claude, codex, opencode, gemini, copilot, aider, kimi, pi, grok, cursor-agent), git and gh availability, and that the data dir is writable. Exit code stays 0; missing items are reported with hints.
+Run `term --doctor` to sanity-check the environment and exit: each agent CLI found on PATH (claude, codex, opencode, gemini, copilot, aider, kimi, pi, grok, cursor-agent), git and gh availability, and that the data dir is writable. Exit code stays 0; missing items are reported with hints. Add `--fix` (`term --doctor --fix`) to print concrete copy-paste install steps (`→ [Agent] npm install -g …`) for every failing check.
+
+## Timelines
+
+Every pane's raw output is continuously logged under `<data_dir>/timelines/pane-<id>.log`. A companion `pane-<id>.meta` file records timestamped byte-offset milestones (every 4 KiB of activity or 30 s of silence) so post-mortems can be scrubbed over time:
+
+```sh
+less ~/.local/share/term/timelines/pane-1.log     # raw session replay
+cat  ~/.local/share/term/timelines/pane-1.meta    # "epoch_ms bytes" milestones
+```
+
+Inside Term, `:timeline view <pane>` opens a replay pane that streams the log live.

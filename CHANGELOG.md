@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.9.0
+
+- `:timeline view <pane>` — post-mortems inside Term: a replay pane streams a pane's session log through the vt100 terminal (auto-follows new output on unix; static snapshot on Windows)
+- Timeline timestamps: a companion `<data_dir>/timelines/pane-<id>.meta` file records `epoch_ms bytes` milestones (every 4 KiB of activity or 30 s of silence); `:timeline` now shows per-pane idle seconds for at-a-glance activity
+- `term --doctor --fix` — failing checks now come with concrete copy-paste install steps (`→ [Claude Code] npm install -g @anthropic-ai/claude-code`), verified live on a machine with 8 missing CLIs
+- 71 unit tests (install-hint mapping, fix-carrying checks, meta milestones with byte-offset parity, replay-pane spawn + follow, `:timeline view` error paths)
+
 ## v0.8.0
 
 - Session timeline capture (`:timeline`): every live pane's raw PTY output is logged continuously to `<data_dir>/timelines/pane-<id>.log` (8 MiB in-memory window; append-only on disk) for post-mortems — `cat`/`less` the log to replay what an agent did while you were away; `:timeline` lists paths + sizes, `:timeline on|off [<pane>]` pauses/resumes capture, `:timeline export <file>` copies the active pane's log into the repo
