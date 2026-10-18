@@ -19,6 +19,10 @@ pub struct Cli {
     #[arg(long)]
     pub doctor: bool,
 
+    /// With --doctor, print copy-paste fix suggestions for failing checks.
+    #[arg(long)]
+    pub fix: bool,
+
     /// Restore panes from the previously saved session.
     #[arg(long)]
     pub restore: bool,

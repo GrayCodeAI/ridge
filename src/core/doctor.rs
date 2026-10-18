@@ -38,6 +38,27 @@ pub struct Check {
     pub name: String,
     pub ok: bool,
     pub detail: String,
+    /// Concrete copy-paste fix for a failing check (None = nothing to fix).
+    pub fix: Option<String>,
+}
+
+/// Copy-paste install line for a missing CLI (best-effort, popular channels).
+pub fn install_hint(exe: &str) -> Option<&'static str> {
+    Some(match exe {
+        "claude" => "npm install -g @anthropic-ai/claude-code",
+        "codex" => "npm install -g @openai/codex",
+        "opencode" => "npm install -g opencode-ai",
+        "gemini" => "npm install -g @google/gemini-cli",
+        "copilot" => "npm install -g @github/copilot  (or: gh extension install github/gh-copilot)",
+        "aider" => "python -m pip install aider-install && aider-install",
+        "kimi" => "npm install -g @moonshot-ai/kimi-cli",
+        "pi" => "npm install -g pi-cli-ai",
+        "grok" => "npm install -g @vibe-kit/grok-cli",
+        "cursor-agent" => "curl -fsSL https://cursor.com/install | sh",
+        "git" => "apt install git · brew install git · winget install Git.Git",
+        "gh" => "apt install gh · brew install gh · winget install GitHub.cli",
+        _ => return None,
+    })
 }
 
 /// Run all checks against a registry.
@@ -53,11 +74,13 @@ pub fn run_checks(registry: &AgentRegistry) -> Vec<Check> {
                 name: a.name().to_string(),
                 ok: true,
                 detail: format!("{exe} found at {}", p.display()),
+                fix: None,
             }),
             None => out.push(Check {
                 name: a.name().to_string(),
                 ok: false,
                 detail: format!("{exe} NOT found on PATH"),
+                fix: install_hint(exe).map(|s| s.to_string()),
             }),
         }
     }
@@ -79,6 +102,11 @@ pub fn run_checks(registry: &AgentRegistry) -> Vec<Check> {
             name: name.to_string(),
             ok,
             detail,
+            fix: if ok {
+                None
+            } else {
+                install_hint(cmd).map(|s| s.to_string())
+            },
         });
     }
 
@@ -88,12 +116,17 @@ pub fn run_checks(registry: &AgentRegistry) -> Vec<Check> {
         name: "data dir".to_string(),
         ok: dir_ok,
         detail: format!("{}", data.display()),
+        fix: if dir_ok {
+            None
+        } else {
+            Some("set XDG_DATA_HOME to a writable location, or check disk/permissions".to_string())
+        },
     });
     out
 }
 
-/// CLI entry: print the report.
-pub fn run_cli_checks() {
+/// CLI entry: print the report; with `fix`, add copy-paste suggestions.
+pub fn run_cli_checks(with_fix: bool) {
     println!("term doctor — environment checks\n");
     let registry = AgentRegistry::new();
     let checks = run_checks(&registry);
@@ -114,7 +147,17 @@ pub fn run_cli_checks() {
             if missing == 1 { "" } else { "s" },
             if missing == 1 { "s" } else { "" }
         );
-        println!("hint: install the missing agent CLIs, or use `spawn generic` / shell panes.");
+        if with_fix {
+            println!("\nsuggested fixes:");
+            for c in &checks {
+                if let (false, Some(hint)) = (c.ok, &c.fix) {
+                    println!("  → [{}] {hint}", c.name);
+                }
+            }
+        } else {
+            println!("hint: rerun with `term --doctor --fix` for copy-paste install steps,");
+            println!("      or use `spawn generic` / shell panes for missing agents.");
+        }
     }
 }
 
@@ -155,5 +198,49 @@ mod tests {
         assert!(git.ok, "git is required in CI and dev environments");
         // generic (no exe) is skipped
         assert!(!checks.iter().any(|c| c.name == "Generic"));
+    }
+
+    #[test]
+    fn install_hint_matches_known_exes() {
+        assert_eq!(
+            install_hint("claude"),
+            Some("npm install -g @anthropic-ai/claude-code")
+        );
+        assert_eq!(
+            install_hint("cursor-agent"),
+            Some("curl -fsSL https://cursor.com/install | sh")
+        );
+        assert!(install_hint("generic").is_none());
+        assert!(install_hint("definitely-unknown-xyz").is_none());
+    }
+
+    #[test]
+    fn failed_checks_carry_fix_hints() {
+        let registry = AgentRegistry::new();
+        let checks = run_checks(&registry);
+        for c in &checks {
+            if c.ok {
+                assert!(
+                    c.fix.is_none(),
+                    "passing check should have no fix: {}",
+                    c.name
+                );
+                continue;
+            }
+            match c.name.as_str() {
+                "data dir" => assert!(c.fix.is_some()),
+                "git" | "gh" => assert_eq!(c.fix.as_deref(), install_hint(c.name.as_str())),
+                _ => {
+                    // agent check: detail starts with the exe name
+                    let exe = c.detail.split_whitespace().next().unwrap_or("");
+                    assert_eq!(
+                        c.fix.as_deref(),
+                        install_hint(exe),
+                        "hint mismatch for {}",
+                        c.name
+                    );
+                }
+            }
+        }
     }
 }
