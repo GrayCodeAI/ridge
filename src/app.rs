@@ -205,6 +205,21 @@ impl App {
                 let cwd = self.cwd.clone();
                 self.spawn_agent(agent, cwd, None);
             }
+            "session" => {
+                if parts.len() >= 2 && parts[1] == "save" {
+                    save_session_file(self);
+                    self.status_message = "session saved".to_string();
+                } else if parts.len() >= 2 && parts[1] == "clear" {
+                    let path = crate::config::data_dir().join("session.json");
+                    if std::fs::remove_file(&path).is_ok() {
+                        self.status_message = "saved session cleared".to_string();
+                    } else {
+                        self.status_message = "no saved session".to_string();
+                    }
+                } else {
+                    self.status_message = "usage: session save | session clear".to_string();
+                }
+            }
             "close" => self.close_active_pane(),
             "delegate" => {
                 // delegate <pane_index> <message...>
@@ -347,7 +362,7 @@ impl App {
             }
             "help" => {
                 self.status_message =
-                    "commands: spawn <agent>, close, delegate <pane> <msg>, broadcast <msg>, export costs, account list/add, task add/start/done/lease/gate/merge/kanban/fanout, branch".to_string();
+                    "commands: spawn <agent>, close, delegate <pane> <msg>, broadcast <msg>, session save/clear, export costs, account list/add, task add/start/done/lease/gate/merge/kanban/fanout, branch".to_string();
             }
             other => {
                 self.status_message = format!("unknown command: {other}");
@@ -401,6 +416,86 @@ impl App {
     }
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PaneSnapshot {
+    pub agent_id: String,
+    pub title: String,
+}
+
+/// Persist open panes (agent ids + titles) to ~/.local/share/term/session.json
+/// so `term --restore` can bring them back by resuming each agent's last session.
+pub fn save_session_file(app: &App) {
+    let dir = crate::config::data_dir();
+    if std::fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+    let panes: Vec<PaneSnapshot> = app
+        .panes
+        .iter()
+        .filter_map(|p| {
+            p.agent_id.as_ref().map(|a| PaneSnapshot {
+                agent_id: a.clone(),
+                title: p.title.clone(),
+            })
+        })
+        .collect();
+    let path = dir.join("session.json");
+    if let Ok(json) = serde_json::to_string_pretty(&panes) {
+        let _ = std::fs::write(&path, json);
+    }
+}
+
+pub fn load_session_file() -> Vec<PaneSnapshot> {
+    let path = crate::config::data_dir().join("session.json");
+    std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+impl App {
+    /// Recreate panes from the last saved session, resuming each agent's
+    /// latest session file when available (falls back to a fresh spawn).
+    pub fn restore_saved_session(&mut self, cwd: std::path::PathBuf) {
+        let snaps = load_session_file();
+        if snaps.is_empty() {
+            self.status_message = "no saved session".to_string();
+            return;
+        }
+        let cmds: Vec<(String, portable_pty::CommandBuilder)> = snaps
+            .iter()
+            .filter_map(|s| {
+                let a = self.registry.find_by_id(&s.agent_id)?;
+                let cmd = crate::core::session::resume_command(a, &cwd)
+                    .unwrap_or_else(|| a.spawn_cmd(&cwd));
+                Some((s.agent_id.clone(), cmd))
+            })
+            .collect();
+        let mut restored = 0usize;
+        for (agent_id, cmd) in cmds {
+            let agent_name = self
+                .registry
+                .find_by_id(&agent_id)
+                .map(|a| a.name().to_string())
+                .unwrap_or_else(|| agent_id.clone());
+            if let Ok(pty) = PtySession::spawn(cmd, 24, 80) {
+                let id = self.next_pane_id;
+                self.next_pane_id += 1;
+                let mut pane = Pane::new(id, format!("{} #{}", agent_name, id));
+                pane.agent_id = Some(agent_id);
+                pane.pty = Some(pty);
+                pane.status = AgentStatus::Working;
+                self.panes.push(pane);
+                restored += 1;
+            }
+        }
+        if !self.panes.is_empty() {
+            self.active_pane = self.panes.len() - 1;
+        }
+        self.status_message = format!("restored {} panes", restored);
+    }
+}
+
 pub async fn run(config: Config, cli: Cli) -> Result<()> {
     if cli.headless {
         tracing::info!("headless mode not yet implemented");
@@ -415,6 +510,14 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
 
     let mut app = App::new(config);
     let mut events = EventHandler::new(Duration::from_millis(250));
+
+    if cli.restore {
+        let base = cli
+            .cwd
+            .clone()
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| ".".into()));
+        app.restore_saved_session(base);
+    }
 
     loop {
         terminal.draw(|f| ui::render(f, &mut app))?;
@@ -465,6 +568,9 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
             break;
         }
     }
+
+    // Persist open panes so the next `term --restore` can bring them back.
+    save_session_file(&app);
 
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
