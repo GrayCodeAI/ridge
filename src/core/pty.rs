@@ -110,3 +110,9 @@ impl PtySession {
         lines[start..].join("\n")
     }
 }
+
+impl Drop for PtySession {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+    }
+}
