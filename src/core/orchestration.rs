@@ -67,16 +67,22 @@ impl TaskBoard {
             .iter()
             .filter(|t| {
                 t.status == TaskStatus::Pending
-                    && t.deps
-                        .iter()
-                        .all(|d| self.tasks.iter().any(|x| x.id == *d && x.status == TaskStatus::Done))
+                    && t.deps.iter().all(|d| {
+                        self.tasks
+                            .iter()
+                            .any(|x| x.id == *d && x.status == TaskStatus::Done)
+                    })
             })
             .map(|t| t.id)
             .collect()
     }
 
     pub fn start_task(&mut self, id: u64, repo: &Path) -> Result<PathBuf, String> {
-        let task = self.tasks.iter_mut().find(|t| t.id == id).ok_or("not found")?;
+        let task = self
+            .tasks
+            .iter_mut()
+            .find(|t| t.id == id)
+            .ok_or("not found")?;
         if task.status != TaskStatus::Pending {
             return Err("not pending".into());
         }

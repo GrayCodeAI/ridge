@@ -98,7 +98,10 @@ impl AgentRegistry {
     }
 
     pub fn find_by_id(&self, id: &str) -> Option<&dyn Agent> {
-        self.agents.iter().find(|a| a.id() == id).map(|a| a.as_ref())
+        self.agents
+            .iter()
+            .find(|a| a.id() == id)
+            .map(|a| a.as_ref())
     }
 
     pub fn detect(&self, process_name: &str, cmdline: &str) -> Option<&dyn Agent> {

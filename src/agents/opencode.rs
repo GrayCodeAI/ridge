@@ -31,7 +31,10 @@ impl Agent for OpenCodeAgent {
     fn session_files(&self, cwd: &Path) -> Vec<PathBuf> {
         let mut out = Vec::new();
         if let Some(home) = std::env::var_os("HOME") {
-            let base = PathBuf::from(home).join(".local").join("share").join("opencode");
+            let base = PathBuf::from(home)
+                .join(".local")
+                .join("share")
+                .join("opencode");
             if base.exists() {
                 collect(&base, &mut out);
             }
