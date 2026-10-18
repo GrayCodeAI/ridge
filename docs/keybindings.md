@@ -14,4 +14,5 @@
 - `/` — search mode
 - `j` / `k` (Diff, Files tabs) — scroll down / up
 - `n` / `p` (Diff tab) — next / previous hunk
-- Up / Down — scroll Diff and Files tabs
+- Up / Down — scroll Diff and Files tabs; Up/Down in search selects results
+- `?` — help overlay (Esc closes)

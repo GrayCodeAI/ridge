@@ -104,6 +104,8 @@ pub struct App {
     pub search_mode: bool,
     pub search_buffer: String,
     pub search_results: Vec<String>,
+    pub search_selected: usize,
+    pub show_help: bool,
 
     pub diff_scroll: usize,
     pub files_scroll: usize,
@@ -136,6 +138,8 @@ impl App {
             search_mode: false,
             search_buffer: String::new(),
             search_results: Vec::new(),
+            search_selected: 0,
+            show_help: false,
 
             module_outputs: crate::core::modules::run_all(),
             diff_scroll: 0,
@@ -577,6 +581,7 @@ impl App {
         let mut results = Vec::new();
         if q.is_empty() {
             self.search_results = results;
+            self.search_selected = 0;
             return;
         }
         // Files
@@ -606,6 +611,9 @@ impl App {
         }
         results.truncate(50);
         self.search_results = results;
+        self.search_selected = self
+            .search_selected
+            .min(self.search_results.len().saturating_sub(1));
     }
 
     pub fn delegate_to_pane(&self, idx: usize, msg: &str) {
@@ -847,11 +855,22 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
                 app.search_results.clear();
             }
             KeyCode::Enter => {
-                // keep results shown; Esc to exit
+                // Show the highlighted result; Esc exits.
+                if let Some(r) = app.search_results.get(app.search_selected).cloned() {
+                    app.status_message = format!("selected: {r}");
+                }
             }
             KeyCode::Backspace => {
                 app.search_buffer.pop();
                 app.run_search();
+            }
+            KeyCode::Up => {
+                app.search_selected = app.search_selected.saturating_sub(1);
+            }
+            KeyCode::Down => {
+                if app.search_selected + 1 < app.search_results.len() {
+                    app.search_selected += 1;
+                }
             }
             KeyCode::Char(c) => {
                 app.search_buffer.push(c);
@@ -921,6 +940,8 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
     }
 
     match (key.code, key.modifiers) {
+        (KeyCode::Char('?'), _) => app.show_help = !app.show_help,
+        (KeyCode::Esc, _) => app.show_help = false,
         (KeyCode::Char('q'), _) => app.should_quit = true,
         (KeyCode::Char('c'), KeyModifiers::CONTROL) => app.should_quit = true,
         (KeyCode::Tab, _) => app.current_tab = app.current_tab.next(),
@@ -1048,6 +1069,7 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
             app.search_mode = true;
             app.search_buffer.clear();
             app.search_results.clear();
+            app.search_selected = 0;
         }
         // Forward typed input to active pane PTY.
         (KeyCode::Char(c), KeyModifiers::NONE) | (KeyCode::Char(c), KeyModifiers::SHIFT) => {
