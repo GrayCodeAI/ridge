@@ -70,4 +70,3 @@ pub fn data_dir() -> PathBuf {
     }
     PathBuf::from(".local").join("share").join("term")
 }
-EOF

@@ -49,4 +49,3 @@ impl EventHandler {
         self.rx.recv().await
     }
 }
-EOF

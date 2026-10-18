@@ -68,4 +68,3 @@ fn walk_jsonl(dir: &Path, out: &mut Vec<PathBuf>) {
         }
     }
 }
-EOF

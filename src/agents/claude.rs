@@ -92,4 +92,3 @@ impl Agent for ClaudeAgent {
         Some("last")
     }
 }
-EOF

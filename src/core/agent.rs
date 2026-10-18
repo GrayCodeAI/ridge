@@ -114,4 +114,3 @@ impl Default for AgentRegistry {
         Self::new()
     }
 }
-EOF

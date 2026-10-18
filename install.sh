@@ -7,7 +7,6 @@ REPO="GrayCodeAI/term"
 BIN="term"
 INSTALL_DIR="${TERM_INSTALL_DIR:-$HOME/.local/bin}"
 
-# Detect OS/arch.
 OS="$(uname -s)"
 ARCH="$(uname -m)"
 case "$OS" in
@@ -21,16 +20,13 @@ case "$ARCH" in
   *) echo "Unsupported arch: $ARCH" >&2; exit 1 ;;
 esac
 
-# Prefer musl on Linux for portability.
 if [ "$OS" = "Linux" ]; then
   TARGET="${ARCH_SLUG}-unknown-linux-musl"
 else
   TARGET="${ARCH_SLUG}-${OS_SLUG}"
 fi
 
-# Fetch latest release tag.
-TAG="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-  | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p')"
+TAG="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest"   | sed -n 's/.*"tag_name": *"\([^"]*\)".*//p')"
 if [ -z "$TAG" ]; then
   echo "Could not determine latest release." >&2
   exit 1
@@ -50,6 +46,3 @@ case ":$PATH:" in
   *":$INSTALL_DIR:"*) ;;
   *) echo "Add $INSTALL_DIR to your PATH to use 'term'." ;;
 esac
-EOF
-chmod +x /home/riverraftlabs-0000/Desktop/term/install.sh
-echo "install.sh created"

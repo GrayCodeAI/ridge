@@ -17,4 +17,3 @@ pub fn resume_command(agent: &dyn Agent, cwd: &Path) -> Option<portable_pty::Com
     // Fall back to "last"
     agent.resume_cmd("last", cwd)
 }
-EOF
