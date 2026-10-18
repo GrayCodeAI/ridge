@@ -196,6 +196,11 @@ fn render_agents(f: &mut Frame, app: &App, area: Rect) {
                 } else {
                     String::new()
                 };
+                let sid_str = p
+                    .session_id
+                    .as_deref()
+                    .map(|s| format!(" {s}"))
+                    .unwrap_or_default();
                 let line = Line::from(vec![
                     Span::raw(marker),
                     Span::raw(indent),
@@ -207,6 +212,7 @@ fn render_agents(f: &mut Frame, app: &App, area: Rect) {
                         if p.attention { "  ⚠" } else { "" },
                         Style::default().fg(Color::Red),
                     ),
+                    Span::styled(sid_str, Style::default().fg(Color::DarkGray)),
                 ]);
                 ListItem::new(line)
             })
@@ -253,18 +259,22 @@ fn render_git(f: &mut Frame, app: &App, area: Rect) {
 
     let branch = crate::core::git::current_branch(&app.cwd);
     let status = crate::core::git::status_porcelain(&app.cwd);
-    let log = crate::core::git::log_oneline(&app.cwd, 10);
+    let log = crate::core::git::log_graph(&app.cwd, 20);
     let prs = crate::core::git::gh_prs(&app.cwd);
 
     let text = format!(
-        "Branch: {}\n\nStatus:\n{}\n\nRecent commits:\n{}\n\nPull requests:\n{}",
+        "Branch: {}\n\nStatus:\n{}\n\nHistory (graph):\n{}\n\nPull requests:\n{}",
         branch,
         if status.is_empty() {
             "(clean)".to_string()
         } else {
             status
         },
-        log,
+        if log.is_empty() {
+            "(no commits)".to_string()
+        } else {
+            log
+        },
         prs
     );
     let para = Paragraph::new(text).style(Style::default().fg(Color::White));
