@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod git;
+pub mod inbox;
 pub mod modules;
 pub mod orchestration;
 pub mod pty;

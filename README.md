@@ -55,6 +55,7 @@ term --restore
 - `[` / `]` — switch active pane
 - `:` — command mode (spawn, close, delegate, task add/start/done, race, branch, help)
 - `:race <prompt>` — fan out to claude/codex/opencode, each in its own worktree + branch; `:race winner <idx>` merges the winner and cleans up losers
+- `o` — reply inbox: delegations (`=` or `:delegate`) are tracked, agent replies captured when they block/finish
 - Typed chars/Enter/Backspace — forwarded to active PTY
 
 ## Tabs

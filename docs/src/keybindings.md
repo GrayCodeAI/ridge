@@ -21,3 +21,4 @@
 - `S` — zellij-style split (cycle bottom preview pane)
 - `w` — close the split
 - `?` — help overlay (Esc closes)
+- `o` — reply inbox overlay (delegated prompts + captured agent replies; opens as read, Esc closes)

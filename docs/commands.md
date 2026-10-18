@@ -28,6 +28,9 @@ Type `:` to enter command mode.
 - `race winner <idx>` — merge the winning contestant's branch and clean up the losing panes/worktrees
 - `race cancel` — close all race panes and remove their worktrees
 - `race` / `race status` — show contestants, statuses, and the winner (★)
+- `inbox` — open the reply inbox overlay (captured replies from delegations)
+- `inbox unread` — count unread captured replies
+- `inbox clear` — empty the inbox
 - `branch` — show current branch
 - `help` — list commands
 
