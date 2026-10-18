@@ -121,3 +121,33 @@ impl TaskBoard {
         out
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn task_board_add_and_ready() {
+        let mut board = TaskBoard::new();
+        let id1 = board.add("first".into(), vec![], None);
+        let id2 = board.add("second".into(), vec![id1], None);
+        assert_eq!(board.ready_tasks(), vec![id1]);
+        board.complete_task(id1, true);
+        assert_eq!(board.ready_tasks(), vec![id2]);
+    }
+
+    #[test]
+    fn task_status_labels() {
+        assert_eq!(TaskStatus::Pending.label(), "pending");
+        assert_eq!(TaskStatus::Done.label(), "done");
+    }
+
+    #[test]
+    fn task_board_render() {
+        let mut board = TaskBoard::new();
+        board.add("hello".into(), vec![], None);
+        let r = board.render();
+        assert!(r.contains("hello"));
+        assert!(r.contains("pending"));
+    }
+}
