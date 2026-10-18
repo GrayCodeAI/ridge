@@ -22,7 +22,7 @@ pub fn list_worktrees(repo: &Path) -> String {
         .output()
     {
         Ok(o) => String::from_utf8_lossy(&o.stdout).to_string(),
-        Err(e) => format!("error: {}", e),
+        Err(e) => format!("error: {e}"),
     }
 }
 

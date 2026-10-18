@@ -86,10 +86,10 @@ impl TaskBoard {
         if task.status != TaskStatus::Pending {
             return Err("not pending".into());
         }
-        let branch = format!("term/task-{}", id);
+        let branch = format!("term/task-{id}");
         let base = worktree::worktree_base(repo);
         let _ = std::fs::create_dir_all(&base);
-        let path = base.join(format!("task-{}", id));
+        let path = base.join(format!("task-{id}"));
         worktree::create_worktree(repo, &branch, &path)?;
         task.status = TaskStatus::Running;
         task.worktree = Some(path.clone());

@@ -28,7 +28,7 @@ impl Agent for CodexAgent {
         cmd.cwd(cwd);
         Some(cmd)
     }
-    fn session_files(&self, cwd: &Path) -> Vec<PathBuf> {
+    fn session_files(&self, _cwd: &Path) -> Vec<PathBuf> {
         let mut out = Vec::new();
         if let Some(home) = std::env::var_os("HOME") {
             let base = PathBuf::from(home).join(".codex").join("sessions");

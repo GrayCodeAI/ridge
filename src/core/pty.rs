@@ -21,7 +21,7 @@ impl PtySession {
             pixel_height: 0,
         })?;
 
-        let mut child = pair.slave.spawn_command(cmd)?;
+        let child = pair.slave.spawn_command(cmd)?;
         // Drop slave so EOF propagates.
         drop(pair.slave);
 
@@ -74,9 +74,6 @@ impl PtySession {
             pixel_width: 0,
             pixel_height: 0,
         })?;
-        if let Ok(mut p) = self.parser.lock() {
-            p.screen().set_size(rows, cols);
-        }
         Ok(())
     }
 
@@ -92,7 +89,7 @@ impl PtySession {
                 for col in 0..screen.size().1 {
                     let cell = screen.cell(row, col);
                     if let Some(c) = cell {
-                        out.push_str(c.contents());
+                        out.push_str(&c.contents());
                     } else {
                         out.push(' ');
                     }

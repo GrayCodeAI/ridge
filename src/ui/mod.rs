@@ -1,5 +1,4 @@
 use crate::app::{App, Tab};
-use crate::core::agent::AgentStatus;
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
@@ -201,14 +200,6 @@ fn render_agents(f: &mut Frame, app: &App, area: Rect) {
     }
 }
 
-fn placeholder(f: &mut Frame, area: Rect, text: &str) {
-    let block = Block::default().borders(Borders::ALL);
-    let inner = block.inner(area);
-    f.render_widget(block, area);
-    let para = Paragraph::new(text).style(Style::default().fg(Color::Gray));
-    f.render_widget(para, inner);
-}
-
 fn render_git(f: &mut Frame, app: &App, area: Rect) {
     let block = Block::default().borders(Borders::ALL).title(" Git ");
     let inner = block.inner(area);
@@ -276,7 +267,6 @@ fn render_files(f: &mut Frame, app: &App, area: Rect) {
     let inner = block.inner(area);
     f.render_widget(block, area);
 
-    // Simple file listing via git ls-files.
     let out = crate::core::git::run_git(&app.cwd, &["ls-files"]);
     let text = if out.is_empty() {
         "(no tracked files or not a git repo)".to_string()
@@ -310,7 +300,7 @@ fn render_settings(f: &mut Frame, app: &App, area: Rect) {
 
     let mut modules = String::new();
     for (name, out) in &app.module_outputs {
-        modules.push_str(&format!("  {} -> {}\n", name, out));
+        modules.push_str(&format!("  {name} -> {out}\n"));
     }
     if modules.is_empty() {
         modules = "  (none in ~/.config/term/modules)\n".to_string();
