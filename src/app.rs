@@ -64,6 +64,7 @@ pub struct Pane {
     pub cost_usd: f64,
     pub parent_pane: Option<usize>,
     pub children: Vec<usize>,
+    pub input_buffer: String,
 }
 
 impl Pane {
@@ -77,6 +78,7 @@ impl Pane {
             cost_usd: 0.0,
             parent_pane: None,
             children: Vec::new(),
+            input_buffer: String::new(),
         }
     }
 }
@@ -654,6 +656,7 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
         // Forward typed input to active pane PTY.
         (KeyCode::Char(c), KeyModifiers::NONE) | (KeyCode::Char(c), KeyModifiers::SHIFT) => {
             if let Some(pane) = app.active_pane_mut() {
+                pane.input_buffer.push(c);
                 if let Some(pty) = &pane.pty {
                     let mut b = [0u8; 4];
                     let n = c.encode_utf8(&mut b).len();
@@ -662,14 +665,41 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
             }
         }
         (KeyCode::Enter, _) => {
-            if let Some(pane) = app.active_pane_mut() {
+            // Inline delegation: if input started with '=', route to target pane.
+            let mut delegated = false;
+            let mut target_idx = None;
+            let mut msg = String::new();
+            if let Some(pane) = app.active_pane() {
+                if pane.input_buffer.trim_start().starts_with('=') {
+                    let buf = pane.input_buffer.trim().to_string();
+                    let mut parts = buf[1..].splitn(2, char::is_whitespace);
+                    if let Some(tok) = parts.next() {
+                        if let Ok(idx) = tok.parse::<usize>() {
+                            target_idx = Some(idx);
+                            msg = parts.next().unwrap_or("").trim().to_string();
+                            delegated = true;
+                        }
+                    }
+                }
+            }
+            if delegated {
+                if let Some(idx) = target_idx {
+                    app.delegate_to_pane(idx, &msg);
+                    app.status_message = format!("delegated to pane {}", idx);
+                }
+            } else if let Some(pane) = app.active_pane_mut() {
                 if let Some(pty) = &pane.pty {
                     let _ = pty.write(b"\r");
                 }
             }
+            // reset input buffer
+            if let Some(pane) = app.active_pane_mut() {
+                pane.input_buffer.clear();
+            }
         }
         (KeyCode::Backspace, _) => {
             if let Some(pane) = app.active_pane_mut() {
+                pane.input_buffer.pop();
                 if let Some(pty) = &pane.pty {
                     let _ = pty.write(b"\x7f");
                 }
