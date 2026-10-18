@@ -19,6 +19,15 @@ esac
 
 Make it executable: `chmod +x ~/.config/term/modules/hello.sh`
 
+## Environment
+
+Modules receive live state via the `TERM_JSON` environment variable:
+
+```sh
+#!/bin/sh
+echo "panes=$TERM_JSON"   # {"panes":2,"blocked":1,"tasks":5}
+```
+
 ## Refresh
 Modules are refreshed every 20 ticks (~5 seconds). Output is displayed in the Settings tab under "Modules".
 

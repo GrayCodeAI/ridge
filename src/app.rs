@@ -122,7 +122,7 @@ pub struct App {
 
 impl App {
     pub fn new(config: Config) -> Self {
-        Self {
+        let mut app = Self {
             config,
             current_tab: Tab::Agents,
             should_quit: false,
@@ -143,7 +143,7 @@ impl App {
             show_help: false,
             zoomed: false,
 
-            module_outputs: crate::core::modules::run_all(),
+            module_outputs: Vec::new(),
             diff_scroll: 0,
             files_scroll: 0,
             diff_sections: vec![
@@ -158,7 +158,21 @@ impl App {
                 &std::env::current_dir().unwrap_or_default(),
             ),
             cwd: std::env::current_dir().unwrap_or_default(),
-        }
+        };
+        app.module_outputs = crate::core::modules::run_all(&app.module_state_json());
+        app
+    }
+
+    /// Compact summary of live state, exposed to modules via $TERM_JSON.
+    pub fn module_state_json(&self) -> String {
+        let panes = self.panes.len();
+        let blocked = self
+            .panes
+            .iter()
+            .filter(|p| p.status == AgentStatus::Blocked)
+            .count();
+        let tasks = self.task_board.tasks.len();
+        format!("{{\"panes\":{panes},\"blocked\":{blocked},\"tasks\":{tasks}}}")
     }
 
     pub fn spawn_agent(&mut self, agent_id: &str, cwd: std::path::PathBuf, parent: Option<usize>) {
@@ -817,7 +831,8 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
             Some(Event::Tick) => {
                 app.tick_count = app.tick_count.wrapping_add(1);
                 if app.tick_count.is_multiple_of(20) {
-                    app.module_outputs = crate::core::modules::run_all();
+                    let json = app.module_state_json();
+                    app.module_outputs = crate::core::modules::run_all(&json);
                 }
                 // Refresh visible-tab caches every ~700ms (2 ticks).
                 if app.tick_count.is_multiple_of(2) {
