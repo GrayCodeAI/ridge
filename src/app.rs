@@ -133,6 +133,8 @@ pub struct App {
     pub task_board: crate::core::orchestration::TaskBoard,
     /// Active fan-out race (each contestant works in its own worktree).
     pub race: Option<crate::core::race::Race>,
+    /// Persisted race outcomes feeding the leaderboard.
+    pub race_history: crate::core::race::RaceHistory,
     pub cwd: std::path::PathBuf,
 }
 
@@ -179,6 +181,9 @@ impl App {
                 &std::env::current_dir().unwrap_or_default(),
             ),
             race: None,
+            race_history: crate::core::race::RaceHistory::load(
+                &std::env::current_dir().unwrap_or_default(),
+            ),
             cwd: std::env::current_dir().unwrap_or_default(),
         };
         app.module_outputs = crate::core::modules::run_all(&app.module_state_json());
@@ -414,6 +419,31 @@ impl App {
                     self.close_pane_by_id(pane_id);
                     let _ = crate::core::worktree::remove_worktree(&self.cwd, &wt);
                 }
+                // Record the outcome for the leaderboard.
+                let gate_results: Vec<(String, Option<bool>)> = self
+                    .race
+                    .as_ref()
+                    .expect("race open")
+                    .contestants
+                    .iter()
+                    .map(|c| (c.agent_id.clone(), c.gate_ok))
+                    .collect();
+                let prompt = self
+                    .race
+                    .as_ref()
+                    .map(|r| r.prompt.clone())
+                    .unwrap_or_default();
+                self.race_history.record(crate::core::race::RaceRecord {
+                    prompt,
+                    finished_at: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0),
+                    winner_agent: Some(agent.clone()),
+                    gate_results,
+                    forced: force,
+                });
+                let _ = self.race_history.save(&self.cwd);
                 let winner = &mut self.race.as_mut().expect("race open").contestants[idx];
                 winner.winner = true;
                 winner.promoted = true;
@@ -929,6 +959,34 @@ impl App {
                     } else {
                         self.status_message = "race: no active race".to_string();
                     }
+                } else if parts.len() >= 2 && parts[1] == "leaderboard" {
+                    self.race_history = crate::core::race::RaceHistory::load(&self.cwd);
+                    let lines = self
+                        .race_history
+                        .records
+                        .iter()
+                        .rev()
+                        .take(3)
+                        .map(|r| {
+                            let w = r.winner_agent.as_deref().unwrap_or("(abandoned)");
+                            format!(
+                                "  recent: {} won by {}{}",
+                                r.prompt.chars().take(40).collect::<String>(),
+                                w,
+                                if r.forced { " [forced]" } else { "" }
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    self.status_message = format!(
+                        "race leaderboard:\n{}\n{}",
+                        self.race_history.leaderboard(),
+                        if lines.is_empty() {
+                            String::new()
+                        } else {
+                            format!("recent races:\n{lines}")
+                        }
+                    );
                 } else if parts.len() >= 2 && parts[1] == "cancel" {
                     self.race_cancel();
                 } else if parts.len() >= 2 {
@@ -2082,5 +2140,88 @@ mod queue_tests {
         });
         a.queue_tick();
         assert!(a.queue.items.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod race_history_tests {
+    use super::*;
+    use crate::core::race::{Race, RaceContestant};
+
+    use crate::core::agent::AgentStatus;
+    use std::process::Command;
+
+    fn make_repo(suffix: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("term-race-history-{suffix}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for c in [
+            ["init"].as_slice(),
+            ["config", "user.email", "t@t.com"].as_slice(),
+            ["config", "user.name", "t"].as_slice(),
+        ] {
+            Command::new("git")
+                .args(c)
+                .current_dir(&dir)
+                .output()
+                .unwrap();
+        }
+        std::fs::write(dir.join("a.txt"), "hi").unwrap();
+        Command::new("git")
+            .args(["add", "."])
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "-m", "init"])
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        dir
+    }
+
+    fn contestant(worktree: std::path::PathBuf, branch: &str) -> RaceContestant {
+        RaceContestant {
+            agent_id: "claude".to_string(),
+            pane_id: 999_999,
+            branch: branch.to_string(),
+            worktree,
+            status: Some(AgentStatus::Working),
+            gate_ok: None,
+            winner: false,
+            promoted: false,
+        }
+    }
+
+    #[test]
+    fn winner_persists_record_and_leaderboard_shows_it() {
+        let app_cwd = make_repo("5");
+        let mut a = App::new(crate::config::Config::default());
+        a.cwd = app_cwd.clone();
+
+        let wt = crate::core::worktree::worktree_base(&a.cwd).join("race-gate-test5");
+        crate::core::worktree::create_worktree(&a.cwd, "race-gate-test5", &wt).unwrap();
+        a.race = Some(Race {
+            prompt: "ship it".to_string(),
+            contestants: vec![contestant(wt, "race-gate-test5")],
+            gate_cmd: Some("true".to_string()),
+        });
+        a.race_winner(0, true); // force path also records
+
+        let h = crate::core::race::RaceHistory::load(&a.cwd);
+        assert_eq!(h.records.len(), 1, "record persisted");
+        assert_eq!(h.records[0].winner_agent.as_deref(), Some("claude"));
+        assert!(h.records[0].forced);
+        assert_eq!(h.records[0].prompt, "ship it");
+
+        // command path reloads from disk and shows the win
+        a.execute_command("race leaderboard");
+        assert!(
+            a.status_message.contains("claude: 1 win"),
+            "{}",
+            a.status_message
+        );
+        assert!(a.status_message.contains("ship it"));
+        let _ = std::fs::remove_dir_all(&app_cwd);
     }
 }
