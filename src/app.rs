@@ -62,6 +62,8 @@ pub struct Pane {
     pub pty: Option<PtySession>,
     pub status: AgentStatus,
     pub cost_usd: f64,
+    pub parent_pane: Option<usize>,
+    pub children: Vec<usize>,
 }
 
 impl Pane {
@@ -73,6 +75,8 @@ impl Pane {
             pty: None,
             status: AgentStatus::Idle,
             cost_usd: 0.0,
+            parent_pane: None,
+            children: Vec::new(),
         }
     }
 }
@@ -129,7 +133,7 @@ impl App {
         }
     }
 
-    pub fn spawn_agent(&mut self, agent_id: &str, cwd: std::path::PathBuf) {
+    pub fn spawn_agent(&mut self, agent_id: &str, cwd: std::path::PathBuf, parent: Option<usize>) {
         let agent = match self.registry.find_by_id(agent_id) {
             Some(a) => a,
             None => {
@@ -145,8 +149,15 @@ impl App {
                 let mut pane = Pane::new(id, format!("{} #{}", agent.name(), id));
                 pane.agent_id = Some(agent_id.to_string());
                 pane.pty = Some(pty);
+                pane.parent_pane = parent;
                 pane.status = AgentStatus::Working;
                 self.panes.push(pane);
+                // link to parent
+                if let Some(pid) = parent {
+                    if let Some(p) = self.panes.iter_mut().find(|x| x.id == pid) {
+                        p.children.push(id);
+                    }
+                }
                 self.active_pane = self.panes.len().saturating_sub(1);
                 self.status_message = format!("spawned {} (pane {})", agent.name(), id);
             }
@@ -190,7 +201,7 @@ impl App {
             "spawn" => {
                 let agent = parts.get(1).copied().unwrap_or("claude");
                 let cwd = self.cwd.clone();
-                self.spawn_agent(agent, cwd);
+                self.spawn_agent(agent, cwd, None);
             }
             "close" => self.close_active_pane(),
             "delegate" => {
@@ -219,7 +230,7 @@ impl App {
                             Ok(path) => {
                                 // spawn an agent in that worktree
                                 let agent = parts.get(3).copied().unwrap_or("claude");
-                                self.spawn_agent(agent, path);
+                                self.spawn_agent(agent, path, None);
                                 self.status_message = format!("task {id} started");
                             }
                             Err(e) => self.status_message = format!("start failed: {e}"),
@@ -255,6 +266,14 @@ impl App {
                     }
                 } else if parts.len() >= 3 && parts[1] == "kanban" {
                     self.status_message = self.task_board.render_kanban();
+                } else if parts.len() >= 3 && parts[1] == "subagent" {
+                    // subagent <parent_pane> <agent>
+                    if let Ok(parent) = parts[2].parse::<usize>() {
+                        let agent = parts.get(3).copied().unwrap_or("claude");
+                        let cwd = self.cwd.clone();
+                        self.spawn_agent(agent, cwd, Some(parent));
+                        self.status_message = format!("subagent spawned under pane {}", parent);
+                    }
                 } else if parts.len() >= 3 && parts[1] == "fanout" {
                     let title = parts[2..].join(" ");
                     let agents = ["claude", "codex", "opencode"];
@@ -263,7 +282,7 @@ impl App {
                             .task_board
                             .add(format!("{} [{}]", title, a), vec![], None);
                         if let Ok(path) = self.task_board.start_task(id, &self.cwd) {
-                            self.spawn_agent(a, path);
+                            self.spawn_agent(a, path, None);
                         }
                     }
                     self.status_message = format!("fanout: spawned {} agents", agents.len());
@@ -507,7 +526,7 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
         // Pane management
         (KeyCode::Char('n'), _) => {
             let cwd = std::env::current_dir().unwrap_or_default();
-            app.spawn_agent("claude", cwd);
+            app.spawn_agent("claude", cwd, None);
         }
         (KeyCode::Char('x'), _) => app.close_active_pane(),
         (KeyCode::Char(']'), _) => {
@@ -565,7 +584,7 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
                 .and_then(|p| p.agent_id.clone())
                 .map(|id| (id, app.cwd.clone()));
             if let Some((id, cwd)) = info {
-                app.spawn_agent(&id, cwd);
+                app.spawn_agent(&id, cwd, None);
                 app.status_message = "session forked".to_string();
             }
         }
