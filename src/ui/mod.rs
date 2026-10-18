@@ -163,6 +163,11 @@ fn render_agents(f: &mut Frame, app: &App, area: Rect) {
             .enumerate()
             .map(|(i, p)| {
                 let marker = if i == app.active_pane { "▶ " } else { "  " };
+                let indent = if p.parent_pane.is_some() {
+                    "  └ "
+                } else {
+                    ""
+                };
                 let status_color = p.status.color();
                 let cost_str = if p.cost_usd > 0.0 {
                     format!(" ${:.2}", p.cost_usd)
@@ -171,6 +176,7 @@ fn render_agents(f: &mut Frame, app: &App, area: Rect) {
                 };
                 let line = Line::from(vec![
                     Span::raw(marker),
+                    Span::raw(indent),
                     Span::styled(p.title.clone(), Style::default().fg(Color::White)),
                     Span::raw(" "),
                     Span::styled(p.status.label(), Style::default().fg(status_color)),
