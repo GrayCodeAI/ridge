@@ -83,3 +83,50 @@ pub fn gh_issues(cwd: &Path) -> String {
         Err(_) => "gh CLI not available".to_string(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::process::Command;
+
+    #[test]
+    fn run_git_in_temp_repo() {
+        let dir = std::env::temp_dir().join("term-test-repo");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        Command::new("git")
+            .args(["init"])
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["config", "user.email", "t@t.com"])
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["config", "user.name", "t"])
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        std::fs::write(dir.join("a.txt"), "hi").unwrap();
+        Command::new("git")
+            .args(["add", "."])
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "-m", "init"])
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+
+        // just check it doesn't panic and returns something
+        let b = current_branch(&dir);
+        assert!(!b.is_empty());
+        let _ = status_porcelain(&dir);
+        let _ = log_oneline(&dir, 5);
+        let _ = branches(&dir);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

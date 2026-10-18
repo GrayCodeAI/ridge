@@ -98,3 +98,24 @@ impl Agent for ClaudeAgent {
         Some("last")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::agent::Agent;
+
+    #[test]
+    fn status_blocked_on_permission() {
+        let a = ClaudeAgent;
+        assert_eq!(
+            a.parse_status("Do you want to proceed? (y/n)"),
+            AgentStatus::Blocked
+        );
+    }
+
+    #[test]
+    fn status_idle_on_prompt() {
+        let a = ClaudeAgent;
+        assert_eq!(a.parse_status("done\n> "), AgentStatus::Idle);
+    }
+}
