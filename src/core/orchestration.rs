@@ -176,6 +176,33 @@ impl TaskBoard {
         Ok(())
     }
 
+    pub fn render_kanban(&self) -> String {
+        let mut cols: [Vec<String>; 4] = [vec![], vec![], vec![], vec![]];
+        for t in &self.tasks {
+            let label = format!("#{} {}", t.id, t.title);
+            match t.status {
+                TaskStatus::Pending => cols[0].push(label),
+                TaskStatus::Running => cols[1].push(label),
+                TaskStatus::Blocked => cols[2].push(label),
+                TaskStatus::Done | TaskStatus::Failed => cols[3].push(label),
+            }
+        }
+        let mut out = String::new();
+        out.push_str("Pending        | Running        | Blocked        | Done\n");
+        out.push_str("---------------+----------------+----------------+---------------\n");
+        let max = cols.iter().map(|c| c.len()).max().unwrap_or(0);
+        for i in 0..max {
+            let mut row = String::new();
+            for c in &cols {
+                let cell = c.get(i).cloned().unwrap_or_default();
+                row.push_str(&format!("{:<15}|", cell));
+            }
+            out.push_str(&row);
+            out.push('\n');
+        }
+        out
+    }
+
     pub fn render(&self) -> String {
         let mut out = String::new();
         for t in &self.tasks {
