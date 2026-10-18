@@ -1,10 +1,10 @@
 class Term < Formula
   desc "Mission control for your AI agents. Terminal-native TUI."
   homepage "https://gryacodeai.com/term"
-  url "https://github.com/gryacodeai/term/archive/refs/tags/v0.1.0.tar.gz"
+  url "https://github.com/Patel230/term/archive/refs/tags/v0.1.0.tar.gz"
   sha256 "PLACEHOLDER_SHA256"
   license "MIT"
-  head "https://github.com/gryacodeai/term.git", branch: "main"
+  head "https://github.com/Patel230/term.git", branch: "main"
 
   depends_on "rust" => :build
 

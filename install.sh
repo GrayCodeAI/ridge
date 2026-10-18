@@ -3,7 +3,7 @@
 # Usage: curl -fsSL https://gryacodeai.com/term/install.sh | sh
 set -eu
 
-REPO="gryacodeai/term"
+REPO="Patel230/term"
 BIN="term"
 INSTALL_DIR="${TERM_INSTALL_DIR:-$HOME/.local/bin}"
 
