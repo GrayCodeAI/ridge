@@ -163,7 +163,13 @@ impl App {
                 return;
             }
         };
-        let cmd = agent.spawn_cmd(&cwd);
+        let mut cmd = agent.spawn_cmd(&cwd);
+        // Inject the matching account's env vars (account switcher).
+        if let Some(acc) = self.config.accounts.iter().find(|a| a.agent == agent_id) {
+            for (k, v) in &acc.env {
+                cmd.env(k.clone(), v.clone());
+            }
+        }
         match PtySession::spawn(cmd, 24, 80) {
             Ok(pty) => {
                 let id = self.next_pane_id;
@@ -296,9 +302,56 @@ impl App {
                         });
                         let _ = self.config.save();
                         self.status_message = format!("account added: {}", parts[3]);
+                    } else if parts.len() >= 5 && parts[2] == "env" {
+                        // account env <agent> KEY=VAL — upsert into that account
+                        let agent = parts[3].to_string();
+                        match parts[4].split_once('=') {
+                            Some((k, v)) if !k.is_empty() => {
+                                let idx = match self
+                                    .config
+                                    .accounts
+                                    .iter()
+                                    .position(|a| a.agent == agent)
+                                {
+                                    Some(i) => i,
+                                    None => {
+                                        self.config.accounts.push(crate::config::Account {
+                                            agent: agent.clone(),
+                                            name: "default".to_string(),
+                                            env: std::collections::BTreeMap::new(),
+                                        });
+                                        self.config.accounts.len() - 1
+                                    }
+                                };
+                                self.config.accounts[idx]
+                                    .env
+                                    .insert(k.to_string(), v.to_string());
+                                let _ = self.config.save();
+                                self.status_message = format!("env set for {}: {}={}", agent, k, v);
+                            }
+                            _ => {
+                                self.status_message =
+                                    "usage: account env <agent> KEY=VAL".to_string()
+                            }
+                        }
+                    } else if parts.len() >= 3 && parts[2] == "show" {
+                        // account show <agent> — list its env var keys
+                        let agent = parts[3].to_string();
+                        match self.config.accounts.iter().find(|a| a.agent == agent) {
+                            Some(acc) if !acc.env.is_empty() => {
+                                let mut msg = format!("account {}:\n", agent);
+                                for k in acc.env.keys() {
+                                    msg.push_str(&format!("  {}=<set>\n", k));
+                                }
+                                self.status_message = msg;
+                            }
+                            Some(_) => {
+                                self.status_message = format!("account {} has no env vars", agent)
+                            }
+                            None => self.status_message = format!("no account for {}", agent),
+                        }
                     } else {
-                        self.status_message =
-                            "usage: account list | account add <agent> <name>".to_string();
+                        self.status_message = "usage: account list | add | env | show".to_string();
                     }
                 } else if parts.len() >= 2 && parts[1] == "export" {
                     if parts.len() >= 3 && parts[2] == "costs" {
@@ -406,9 +459,30 @@ impl App {
             "branch" => {
                 self.status_message = crate::core::git::current_branch(&self.cwd);
             }
+            "config" => {
+                let help = "usage: config show | config theme <name>".to_string();
+                if parts.len() >= 2 && parts[1] == "show" {
+                    match crate::config::Config::load() {
+                        Ok(cfg) => match toml::to_string_pretty(&cfg) {
+                            Ok(s) => self.status_message = s,
+                            Err(e) => self.status_message = format!("serialize: {e}"),
+                        },
+                        Err(e) => self.status_message = format!("load: {e}"),
+                    }
+                } else if parts.len() >= 3 && parts[1] == "theme" {
+                    self.config.theme = parts[2].to_string();
+                    if let Ok(()) = self.config.save() {
+                        self.status_message = format!("theme set to {}", parts[2]);
+                    } else {
+                        self.status_message = "theme set (save failed)".to_string();
+                    }
+                } else {
+                    self.status_message = help;
+                }
+            }
             "help" => {
                 self.status_message =
-                    "commands: spawn <agent>, close, delegate <pane> <msg>, broadcast <msg>, session save/clear, export costs, account list/add, task add/start/done/lease/gate/merge/kanban/fanout, branch".to_string();
+                    "commands: spawn <agent>, close, delegate <pane> <msg>, broadcast <msg>, session save/clear, export costs/session, account list/add/env/show, config show/theme, task add/start/done/lease/gate/merge/kanban/fanout, branch".to_string();
             }
             other => {
                 self.status_message = format!("unknown command: {other}");
