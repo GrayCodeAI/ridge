@@ -119,3 +119,30 @@ mod tests {
         assert_eq!(a.parse_status("done\n> "), AgentStatus::Idle);
     }
 }
+
+#[cfg(test)]
+mod extra_tests {
+    use super::*;
+    use crate::core::agent::Agent;
+    use std::io::Write;
+
+    #[test]
+    fn parse_cost_from_jsonl() {
+        let dir = std::env::temp_dir().join("term-claude-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("session.jsonl");
+        let mut f = std::fs::File::create(&path).unwrap();
+        writeln!(
+            f,
+            r#"{{"message":{{"usage":{{"input_tokens":1000,"output_tokens":500}}}}}}"#
+        )
+        .unwrap();
+        let a = ClaudeAgent;
+        let c = a.parse_cost(&path).unwrap();
+        assert_eq!(c.input_tokens, 1000);
+        assert_eq!(c.output_tokens, 500);
+        assert!(c.cost_usd > 0.0);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
