@@ -248,14 +248,9 @@ fn render_git(f: &mut Frame, app: &App, area: Rect) {
 fn render_diff(f: &mut Frame, app: &App, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(" Diff (j/k scroll) ");
+        .title(" Diff (j/k scroll, n/p hunk) ");
     let inner = block.inner(area);
     f.render_widget(block, area);
-
-    let staged = crate::core::git::diff_staged(&app.cwd);
-    let worktree = crate::core::git::diff_worktree(&app.cwd);
-    let untracked = crate::core::git::untracked(&app.cwd);
-    let conflicted = crate::core::git::conflicted(&app.cwd);
 
     let mut lines: Vec<Line> = Vec::new();
     let push_section = |title: &str, body: &String, lines: &mut Vec<Line>| {
@@ -287,11 +282,9 @@ fn render_diff(f: &mut Frame, app: &App, area: Rect) {
         }
         lines.push(Line::from(""));
     };
-    push_section("Staged", &staged, &mut lines);
-    push_section("Worktree", &worktree, &mut lines);
-    push_section("Untracked", &untracked, &mut lines);
-    push_section("Conflicted", &conflicted, &mut lines);
-
+    for (title, body) in &app.diff_sections {
+        push_section(title, body, &mut lines);
+    }
     let total = lines.len();
     let max_scroll = total.saturating_sub(inner.height as usize);
     let para = Paragraph::new(lines).scroll((app.diff_scroll.min(max_scroll) as u16, 0));
@@ -305,16 +298,26 @@ fn render_files(f: &mut Frame, app: &App, area: Rect) {
     let inner = block.inner(area);
     f.render_widget(block, area);
 
-    let out = crate::core::git::run_git(&app.cwd, &["ls-files"]);
-    let lines: Vec<Line> = if out.is_empty() {
+    let lines: Vec<Line> = if app.files_cache.is_empty() {
         vec![Line::from(Span::styled(
             "(no tracked files or not a git repo)",
             Style::default().fg(Color::DarkGray),
         ))]
     } else {
-        out.lines()
+        app.files_cache
+            .iter()
             .take(10_000)
-            .map(|l| Line::from(l.to_string()))
+            .map(|name| {
+                let tint = match app.files_status.get(name).copied() {
+                    Some('A') => Style::default().fg(Color::Green),
+                    Some('M') | Some('T') => Style::default().fg(Color::Yellow),
+                    Some('D') => Style::default().fg(Color::Red),
+                    Some('R') => Style::default().fg(Color::Magenta),
+                    Some('C') | Some('U') => Style::default().fg(Color::Cyan),
+                    _ => Style::default(),
+                };
+                Line::from(Span::styled(name.clone(), tint))
+            })
             .collect()
     };
 
