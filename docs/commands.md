@@ -9,7 +9,8 @@ Type `:` to enter command mode.
 - `session save` / `session clear` — persist or delete saved panes
 - `export costs` — cost CSV
 - `export session <file>` — open-pane snapshot as JSON — export cost CSV
-- `account list` / `account add <agent> <name>`
+- `account list / add <agent> <name> / env <agent> KEY=VAL / show <agent>`
+- `config show / config theme <n>`
 - `task add <title>` — add task
 - `task start <id> [agent]` — start task (creates worktree)
 - `task done <id>` — mark done
