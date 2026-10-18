@@ -284,10 +284,135 @@ fn render_git(f: &mut Frame, app: &App, area: Rect) {
 fn render_diff(f: &mut Frame, app: &App, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(" Diff (j/k scroll, n/p hunk) ");
+        .title(if app.side_by_side {
+            " Diff — side-by-side (j/k scroll, n/p hunk, s unified) "
+        } else {
+            " Diff — unified (j/k scroll, n/p hunk, s side-by-side) "
+        });
     let inner = block.inner(area);
     f.render_widget(block, area);
 
+    if app.side_by_side {
+        render_split_diff(f, app, inner);
+    } else {
+        render_unified_diff(f, app, inner);
+    }
+}
+
+/// One aligned row of the side-by-side view: left = old side, right = new side.
+#[derive(Debug, Clone)]
+struct SideRow {
+    left: String,
+    right: String,
+    left_style: Style,
+    right_style: Style,
+}
+
+/// Build aligned (old | new) rows from cached diff sections.
+fn build_side_rows(sections: &[(&'static str, String)]) -> Vec<SideRow> {
+    let mut rows: Vec<SideRow> = Vec::new();
+    let mut old: Vec<(String, Style)> = Vec::new();
+    let mut new: Vec<(String, Style)> = Vec::new();
+
+    let push_pair = |l: String, ls: Style, r: String, rs: Style, rows: &mut Vec<SideRow>| {
+        rows.push(SideRow {
+            left: l,
+            right: r,
+            left_style: ls,
+            right_style: rs,
+        });
+    };
+
+    // Flush pending -/+ block, zipping and padding to align.
+    let flush = |old: &mut Vec<(String, Style)>,
+                 new: &mut Vec<(String, Style)>,
+                 rows: &mut Vec<SideRow>| {
+        let n = old.len().max(new.len());
+        for i in 0..n {
+            let (ls, _rs) = if i < old.len() {
+                old[i].clone()
+            } else {
+                (String::new(), Style::default())
+            };
+            let (rst, rn) = if i < new.len() {
+                new[i].clone()
+            } else {
+                (String::new(), Style::default())
+            };
+            push_pair(ls, Color::Red.into(), rst, rn, rows);
+        }
+        old.clear();
+        new.clear();
+    };
+
+    for (title, body) in sections {
+        push_pair(
+            format!("=== {title} ==="),
+            Style::default().fg(Color::Cyan),
+            format!("=== {title} ==="),
+            Style::default().fg(Color::Cyan),
+            &mut rows,
+        );
+        if body.is_empty() {
+            push_pair(
+                "(none)".into(),
+                Style::default().fg(Color::DarkGray),
+                "(none)".into(),
+                Style::default().fg(Color::DarkGray),
+                &mut rows,
+            );
+            continue;
+        }
+        for raw in body.lines().take(10_000) {
+            if raw.starts_with("diff ") || raw.starts_with("index ") {
+                flush(&mut old, &mut new, &mut rows);
+                push_pair(
+                    raw.to_string(),
+                    Style::default().fg(Color::Magenta),
+                    raw.to_string(),
+                    Style::default().fg(Color::Magenta),
+                    &mut rows,
+                );
+            } else if raw.starts_with("@@") {
+                flush(&mut old, &mut new, &mut rows);
+                push_pair(
+                    raw.to_string(),
+                    Style::default().fg(Color::Cyan),
+                    raw.to_string(),
+                    Style::default().fg(Color::Cyan),
+                    &mut rows,
+                );
+            } else if raw.starts_with("---") || raw.starts_with("+++") {
+                flush(&mut old, &mut new, &mut rows);
+                push_pair(
+                    raw.to_string(),
+                    Style::default().fg(Color::Blue),
+                    raw.to_string(),
+                    Style::default().fg(Color::Blue),
+                    &mut rows,
+                );
+            } else if raw.starts_with('-') {
+                old.push((raw.to_string(), Style::default()));
+            } else if raw.starts_with('+') {
+                new.push((raw.to_string(), Style::default()));
+            } else {
+                flush(&mut old, &mut new, &mut rows);
+                push_pair(
+                    raw.to_string(),
+                    Style::default().fg(Color::White),
+                    raw.to_string(),
+                    Style::default().fg(Color::White),
+                    &mut rows,
+                );
+            }
+        }
+        flush(&mut old, &mut new, &mut rows);
+    }
+    rows
+}
+
+/// Unified view (single column).
+fn render_unified_diff(f: &mut Frame, app: &App, inner: Rect) {
     let mut lines: Vec<Line> = Vec::new();
     let push_section = |title: &str, body: &String, lines: &mut Vec<Line>| {
         lines.push(Line::from(Span::styled(
@@ -325,6 +450,37 @@ fn render_diff(f: &mut Frame, app: &App, area: Rect) {
     let max_scroll = total.saturating_sub(inner.height as usize);
     let para = Paragraph::new(lines).scroll((app.diff_scroll.min(max_scroll) as u16, 0));
     f.render_widget(para, inner);
+}
+
+/// Side-by-side view (old | new aligned columns).
+fn render_split_diff(f: &mut Frame, app: &App, inner: Rect) {
+    let rows = build_side_rows(&app.diff_sections);
+
+    let half = (inner.width / 2).max(1) as usize;
+    let left: Vec<Line> = rows
+        .iter()
+        .map(|r| Line::from(Span::styled(trunc(&r.left, half), r.left_style)))
+        .collect();
+    let right: Vec<Line> = rows
+        .iter()
+        .map(|r| Line::from(Span::styled(trunc(&r.right, half), r.right_style)))
+        .collect();
+
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(inner);
+
+    let total = rows.len();
+    let max_scroll = total.saturating_sub(cols[0].height as usize);
+    let sc = app.diff_scroll.min(max_scroll) as u16;
+    f.render_widget(Paragraph::new(left).scroll((sc, 0)), cols[0]);
+    f.render_widget(Paragraph::new(right).scroll((sc, 0)), cols[1]);
+}
+
+/// Clamp a string to `max` chars for column rendering.
+fn trunc(s: &str, max: usize) -> String {
+    s.chars().take(max).collect()
 }
 
 fn render_files(f: &mut Frame, app: &App, area: Rect) {
