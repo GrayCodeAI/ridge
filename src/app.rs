@@ -65,6 +65,7 @@ pub struct Pane {
     pub parent_pane: Option<usize>,
     pub children: Vec<usize>,
     pub input_buffer: String,
+    pub attention: bool,
 }
 
 impl Pane {
@@ -79,6 +80,7 @@ impl Pane {
             parent_pane: None,
             children: Vec::new(),
             input_buffer: String::new(),
+            attention: false,
         }
     }
 }
@@ -130,7 +132,9 @@ impl App {
             search_results: Vec::new(),
 
             module_outputs: crate::core::modules::run_all(),
-            task_board: crate::core::orchestration::TaskBoard::new(),
+            task_board: crate::core::orchestration::TaskBoard::load(
+                &std::env::current_dir().unwrap_or_default(),
+            ),
             cwd: std::env::current_dir().unwrap_or_default(),
         }
     }
@@ -356,6 +360,9 @@ impl App {
                         }
                     }
                 }
+                // Persist the board after any task mutation (save is cheap; also
+                // covers fanout/add/start/done/lease/gate/merge).
+                let _ = self.task_board.save(&self.cwd);
             }
             "branch" => {
                 self.status_message = crate::core::git::current_branch(&self.cwd);
@@ -498,7 +505,32 @@ impl App {
 
 pub async fn run(config: Config, cli: Cli) -> Result<()> {
     if cli.headless {
-        tracing::info!("headless mode not yet implemented");
+        // No TUI: print machine-readable facts about this machine's agents.
+        // Note: tracing writes to a file, stdout stays clean for scripting.
+        tracing::info!("headless mode active (cwd {:?})", cli.cwd);
+        let registry = AgentRegistry::new();
+        for a in registry.all() {
+            println!("agent\t{}\t{}", a.id(), a.name());
+        }
+        let cwd = cli
+            .cwd
+            .clone()
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| ".".into()));
+        let branch = crate::core::git::current_branch(&cwd);
+        if !branch.is_empty() {
+            println!("branch\t{}", branch);
+        }
+        let status = crate::core::git::status_porcelain(&cwd);
+        if !status.is_empty() {
+            for line in status.lines().take(100) {
+                println!("status\t{}", line);
+            }
+        }
+        let tasks = crate::core::orchestration::TaskBoard::load(&cwd);
+        for t in &tasks.tasks {
+            println!("task\t{}\t{}\t{}", t.id, t.status.label(), t.title);
+        }
+        let _ = config;
         return Ok(());
     }
 
@@ -523,12 +555,21 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
         terminal.draw(|f| ui::render(f, &mut app))?;
 
         // Refresh agent statuses from PTY output and cost from session files.
-        for pane in app.panes.iter_mut() {
+        // Panes newly entering Blocked/Done while unfocused raise an attention badge.
+        for (idx, pane) in app.panes.iter_mut().enumerate() {
             if let Some(pty) = &pane.pty {
                 let tail = pty.scrollback_tail(8);
                 if let Some(id) = &pane.agent_id.clone() {
                     if let Some(agent) = app.registry.find_by_id(id) {
-                        pane.status = agent.parse_status(&tail);
+                        let new_status = agent.parse_status(&tail);
+                        if new_status != pane.status
+                            && (new_status == AgentStatus::Blocked
+                                || new_status == AgentStatus::Done)
+                            && idx != app.active_pane
+                        {
+                            pane.attention = true;
+                        }
+                        pane.status = new_status;
                         // cost from latest session file
                         let files = agent.session_files(&app.cwd);
                         if let Some(f) = files.into_iter().last() {
@@ -539,6 +580,9 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
                     }
                 }
                 if !pty.is_alive() {
+                    if pane.status != AgentStatus::Done && idx != app.active_pane {
+                        pane.attention = true;
+                    }
                     pane.status = AgentStatus::Done;
                 }
             }
@@ -685,6 +729,10 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
         (KeyCode::Char(']'), _) => {
             if !app.panes.is_empty() {
                 app.active_pane = (app.active_pane + 1) % app.panes.len();
+                // focus clears the attention badge
+                if let Some(pane) = app.panes.get_mut(app.active_pane) {
+                    pane.attention = false;
+                }
             }
         }
         (KeyCode::Char('r'), _) => {
@@ -724,6 +772,7 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
                     let idx = (start + offset) % app.panes.len();
                     if app.panes[idx].status == AgentStatus::Blocked {
                         app.active_pane = idx;
+                        app.panes[idx].attention = false;
                         app.status_message =
                             format!("jumped to blocked pane {}", app.panes[idx].id);
                         break;
@@ -744,6 +793,9 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
         (KeyCode::Char('['), _) => {
             if !app.panes.is_empty() {
                 app.active_pane = (app.active_pane + app.panes.len() - 1) % app.panes.len();
+                if let Some(pane) = app.panes.get_mut(app.active_pane) {
+                    pane.attention = false;
+                }
             }
         }
         (KeyCode::Char(':'), _) => {
