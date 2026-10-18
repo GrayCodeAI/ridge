@@ -1018,7 +1018,6 @@ impl App {
                 self.status_message = crate::core::git::current_branch(&self.cwd);
             }
             "config" => {
-                let help = "usage: config show | config theme <name>".to_string();
                 if parts.len() >= 2 && parts[1] == "show" {
                     match crate::config::Config::load() {
                         Ok(cfg) => match toml::to_string_pretty(&cfg) {
@@ -1034,8 +1033,21 @@ impl App {
                     } else {
                         self.status_message = "theme set (save failed)".to_string();
                     }
+                } else if parts.len() >= 3 && parts[1] == "notify" {
+                    match parts[2] {
+                        "on" | "off" => {
+                            self.config.notify = parts[2] == "on";
+                            if self.config.save().is_ok() {
+                                self.status_message = format!("OS notifications {}", parts[2]);
+                            } else {
+                                self.status_message = format!("notify {} (save failed)", parts[2]);
+                            }
+                        }
+                        _ => self.status_message = "usage: config notify on|off".to_string(),
+                    }
                 } else {
-                    self.status_message = help;
+                    self.status_message =
+                        "usage: config show | theme <name> | notify on|off".to_string();
                 }
             }
             "module" => {
@@ -1633,6 +1645,7 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
         // Refresh agent statuses from PTY output and cost from session files.
         // Panes newly entering Blocked/Done while unfocused raise an attention badge.
         let mut attention_hits = 0u32;
+        let hooks_on = app.config.notify;
         for (idx, pane) in app.panes.iter_mut().enumerate() {
             if let Some(pty) = &pane.pty {
                 let tail = pty.scrollback_tail(8);
@@ -1646,6 +1659,14 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
                         {
                             pane.attention = true;
                             attention_hits += 1;
+                            if hooks_on {
+                                let why = if new_status == AgentStatus::Blocked {
+                                    "is BLOCKED and needs you"
+                                } else {
+                                    "finished"
+                                };
+                                crate::core::notify::notify(&format!("Term — {}", pane.title), why);
+                            }
                         }
                         pane.status = new_status;
                         // cost from latest session file
@@ -1661,6 +1682,12 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
                     if pane.status != AgentStatus::Done && idx != app.active_pane {
                         pane.attention = true;
                         attention_hits += 1;
+                        if hooks_on {
+                            crate::core::notify::notify(
+                                &format!("Term — {}", pane.title),
+                                "session ended",
+                            );
+                        }
                     }
                     pane.status = AgentStatus::Done;
                 }
