@@ -82,3 +82,16 @@ pub fn data_dir() -> PathBuf {
     }
     PathBuf::from(".local").join("share").join("term")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_default_roundtrip() {
+        let cfg = Config::default();
+        let s = toml::to_string_pretty(&cfg).unwrap();
+        let parsed: Config = toml::from_str(&s).unwrap();
+        assert_eq!(parsed.theme, cfg.theme);
+    }
+}
