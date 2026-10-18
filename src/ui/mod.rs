@@ -157,6 +157,12 @@ fn render_body(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_agents(f: &mut Frame, app: &App, area: Rect) {
+    // Zoomed ('z'): active terminal takes the full width (sidebar hidden).
+    if app.zoomed {
+        render_terminal(f, app, area);
+        return;
+    }
+
     // Sidebar (agent/pane list) + main terminal.
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
@@ -210,6 +216,10 @@ fn render_agents(f: &mut Frame, app: &App, area: Rect) {
     }
 
     // Main terminal area
+    render_terminal(f, app, chunks[1]);
+}
+
+fn render_terminal(f: &mut Frame, app: &App, area: Rect) {
     let main_block = Block::default()
         .borders(Borders::ALL)
         .title(if app.panes.is_empty() {
@@ -217,8 +227,8 @@ fn render_agents(f: &mut Frame, app: &App, area: Rect) {
         } else {
             format!(" Terminal — pane {} ", app.panes[app.active_pane].id)
         });
-    let main_inner = main_block.inner(chunks[1]);
-    f.render_widget(main_block, chunks[1]);
+    let main_inner = main_block.inner(area);
+    f.render_widget(main_block, area);
 
     if let Some(pane) = app.panes.get(app.active_pane) {
         if let Some(pty) = &pane.pty {

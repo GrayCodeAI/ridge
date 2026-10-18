@@ -54,3 +54,5 @@ Agents (panes + status), Git, Diff, Files, Orchestration, Settings
 
 MIT
 Unread badges: panes that enter **Blocked**/**Done** while unfocused get a ⚠ badge in the sidebar until focused (clears on `[`, `]`, or `a`).
+
+Extra: `z` zoom, `{`/`}` reorder panes, `?` help overlay.

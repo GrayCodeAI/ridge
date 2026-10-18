@@ -106,6 +106,7 @@ pub struct App {
     pub search_results: Vec<String>,
     pub search_selected: usize,
     pub show_help: bool,
+    pub zoomed: bool,
 
     pub diff_scroll: usize,
     pub files_scroll: usize,
@@ -140,6 +141,7 @@ impl App {
             search_results: Vec::new(),
             search_selected: 0,
             show_help: false,
+            zoomed: false,
 
             module_outputs: crate::core::modules::run_all(),
             diff_scroll: 0,
@@ -985,6 +987,28 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
             app.spawn_agent("claude", cwd, None);
         }
         (KeyCode::Char('x'), _) => app.close_active_pane(),
+        (KeyCode::Char('z'), _) => {
+            app.zoomed = !app.zoomed;
+            app.status_message = if app.zoomed {
+                "zoomed pane".to_string()
+            } else {
+                "unzoomed".to_string()
+            };
+        }
+        (KeyCode::Char('{'), _) => {
+            // move active pane up in the sidebar
+            if app.active_pane > 0 {
+                app.panes.swap(app.active_pane, app.active_pane - 1);
+                app.active_pane -= 1;
+            }
+        }
+        (KeyCode::Char('}'), _) => {
+            // move active pane down in the sidebar
+            if !app.panes.is_empty() && app.active_pane + 1 < app.panes.len() {
+                app.panes.swap(app.active_pane, app.active_pane + 1);
+                app.active_pane += 1;
+            }
+        }
         (KeyCode::Char(']'), _) => {
             if !app.panes.is_empty() {
                 app.active_pane = (app.active_pane + 1) % app.panes.len();
