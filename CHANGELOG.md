@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.3.0
+
+- Fan-out races (`:race <prompt>`): claude/codex/opencode each race in their own git worktree + branch; `:race winner <idx>` merges the winner and cleans up losers; statuses mirrored live in the Orchestration tab
+- Reply inbox (`o`): delegations (`=<pane>`, `:delegate`, `:broadcast`) recorded; agent replies captured automatically when they block or finish; `:inbox unread`, `:inbox clear`
+- `merge_branch` helper in worktree API with branch validation
+- 32 unit tests (race render, inbox lifecycle/predicate/trim, plus prior suite)
+
 ## v0.2.0
 
 - Side-by-side diff view (`s`), hunk navigation (`n`/`p`), cached rendering
