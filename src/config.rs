@@ -3,9 +3,18 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Account {
+    pub agent: String,
+    pub name: String,
+    pub env: std::collections::BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Config {
     pub theme: String,
     pub keybindings: Keybindings,
+    pub accounts: Vec<Account>,
+    pub active_account: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
