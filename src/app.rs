@@ -109,6 +109,7 @@ pub struct App {
     pub search_selected: usize,
     pub show_help: bool,
     pub zoomed: bool,
+    pub side_by_side: bool,
 
     pub diff_scroll: usize,
     pub files_scroll: usize,
@@ -144,6 +145,7 @@ impl App {
             search_selected: 0,
             show_help: false,
             zoomed: false,
+            side_by_side: false,
 
             module_outputs: Vec::new(),
             diff_scroll: 0,
@@ -1008,6 +1010,14 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
         (KeyCode::Char('j'), _) if app.current_tab == Tab::Diff => app.diff_scroll += 1,
         (KeyCode::Char('n'), _) if app.current_tab == Tab::Diff => app.jump_hunk(true),
         (KeyCode::Char('p'), _) if app.current_tab == Tab::Diff => app.jump_hunk(false),
+        (KeyCode::Char('s'), _) if app.current_tab == Tab::Diff => {
+            app.side_by_side = !app.side_by_side;
+            app.status_message = if app.side_by_side {
+                "diff: side-by-side".to_string()
+            } else {
+                "diff: unified".to_string()
+            };
+        }
         (KeyCode::Up, _) if app.current_tab == Tab::Files => {
             app.files_scroll = app.files_scroll.saturating_sub(1)
         }
