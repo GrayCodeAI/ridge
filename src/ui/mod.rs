@@ -5,7 +5,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Tabs},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Tabs},
 };
 
 pub fn render(f: &mut Frame, app: &mut App) {
@@ -47,6 +47,10 @@ pub fn render(f: &mut Frame, app: &mut App) {
         idx += 1;
     }
     render_status(f, app, chunks[idx]);
+
+    if app.show_help {
+        render_help(f, size);
+    }
 }
 
 fn render_mobile(f: &mut Frame, app: &mut App, area: Rect) {
@@ -87,12 +91,24 @@ fn render_delegate_bar(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_search_bar(f: &mut Frame, app: &App, area: Rect) {
-    let text = if app.search_results.is_empty() {
-        format!("/{}  (no matches)", app.search_buffer)
+    let shown: Vec<String> = if app.search_results.is_empty() {
+        vec![format!("/{}  (no matches)", app.search_buffer)]
     } else {
-        format!("/{}  -> {}", app.search_buffer, app.search_results[0])
+        app.search_results
+            .iter()
+            .take(5)
+            .enumerate()
+            .map(|(i, r)| {
+                let marker = if i == app.search_selected.clamp(0, app.search_results.len() - 1) {
+                    "▸ "
+                } else {
+                    "  "
+                };
+                format!("{}{}", marker, r)
+            })
+            .collect()
     };
-    let para = Paragraph::new(text).style(Style::default().fg(Color::Magenta));
+    let para = Paragraph::new(shown.join("  ")).style(Style::default().fg(Color::Magenta));
     f.render_widget(para, area);
 }
 
@@ -405,4 +421,49 @@ fn render_status(f: &mut Frame, app: &App, area: Rect) {
     let line = Line::from(vec![left, right]);
     let para = Paragraph::new(line);
     f.render_widget(para, area);
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let v = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(v[1])[1]
+}
+
+const HELP_TEXT: &str = "Keybindings\n\
+  q / Ctrl+C  quit        Tab / ← →   switch tab\n\
+  1-6  jump to tab        n  spawn Claude     x  close pane\n\
+  r  resume session       f  fork session     a  next blocked\n\
+  [ ]  switch pane        j  k  scroll (Diff/Files)\n\
+  n / p  next/prev hunk (Diff)\n\
+  :  command mode         =  delegate         /  search\n\
+  ?  toggle this help     Esc  close prompt/overlay\n\n\
+Commands\n\
+  spawn <agent> · close · delegate <pane> <msg> · broadcast <msg>\n\
+  task add|start|done|lease|gate|merge|kanban|fanout\n\
+  session save|clear · export costs|session · account list|add|env|show\n\
+  config show|theme · branch · help";
+
+fn render_help(f: &mut Frame, area: Rect) {
+    let popup = centered_rect(66, 80, area);
+    f.render_widget(Clear, popup);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Help (Esc to close) ");
+    let para = Paragraph::new(HELP_TEXT)
+        .style(Style::default().fg(Color::White))
+        .block(block);
+    f.render_widget(para, popup);
 }
