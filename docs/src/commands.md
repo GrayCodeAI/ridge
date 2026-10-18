@@ -25,9 +25,10 @@ Type `:` to enter command mode.
 - `task fanout <prompt>` — fan out to multiple agents
 - `task subagent <parent> <agent>` — spawn subagent
 - `race <prompt>` — start a fan-out race: claude, codex, and opencode each get their own git worktree + branch, and the prompt is delegated to them immediately
-- `race winner <idx>` — merge the winning contestant's branch and clean up the losing panes/worktrees
+- `race` / `race status` — show contestants, statuses, gates, and the winner (★)
+- `race gate <idx>` — run the quality gate in one contestant's worktree (`cargo test` by default for Rust repos; `:race gate-cmd <cmd>` overrides)
+- `race winner <idx> [force]` — gate the contestant, merge its branch, and clean up the losers; a failed gate blocks promotion unless `force` is given
 - `race cancel` — close all race panes and remove their worktrees
-- `race` / `race status` — show contestants, statuses, and the winner (★)
 - `inbox` — open the reply inbox overlay (captured replies from delegations)
 - `inbox unread` — count unread captured replies
 - `inbox clear` — empty the inbox

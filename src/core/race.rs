@@ -11,6 +11,8 @@ pub struct RaceContestant {
     pub branch: String,
     pub worktree: PathBuf,
     pub status: Option<crate::core::agent::AgentStatus>,
+    /// Result of the quality gate run in this contestant's worktree.
+    pub gate_ok: Option<bool>,
     pub winner: bool,
     pub promoted: bool,
 }
@@ -19,6 +21,8 @@ pub struct RaceContestant {
 pub struct Race {
     pub prompt: String,
     pub contestants: Vec<RaceContestant>,
+    /// Optional shell command overriding the default quality gate.
+    pub gate_cmd: Option<String>,
 }
 
 impl Race {
@@ -33,11 +37,16 @@ impl Race {
                 .status
                 .map(|s| s.label().to_string())
                 .unwrap_or_else(|| "(gone)".to_string());
+            let gate = match c.gate_ok {
+                Some(true) => " ✓",
+                Some(false) => " ✗gate",
+                None => "",
+            };
             let star = if c.winner { " ★" } else { "" };
             let closed = if c.promoted { " (closed)" } else { "" };
             out.push_str(&format!(
-                "  [{}] {} pane {} — {}{}{}\n",
-                i, c.agent_id, c.pane_id, st, star, closed
+                "  [{}] {} pane {} — {}{}{}{}\n",
+                i, c.agent_id, c.pane_id, st, gate, star, closed
             ));
         }
         out
@@ -55,6 +64,7 @@ mod tests {
             branch: format!("race-1-{agent}"),
             worktree: PathBuf::from(format!("/tmp/wt-{agent}")),
             status: Some(crate::core::agent::AgentStatus::Working),
+            gate_ok: None,
             winner,
             promoted,
         }
@@ -68,6 +78,7 @@ mod tests {
                 contestant("claude", false, false),
                 contestant("codex", true, true),
             ],
+            gate_cmd: None,
         };
         r.contestants[1].status = Some(crate::core::agent::AgentStatus::Done);
         let s = r.render();

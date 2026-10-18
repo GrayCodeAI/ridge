@@ -280,6 +280,7 @@ impl App {
         let mut race = crate::core::race::Race {
             prompt: prompt.to_string(),
             contestants: Vec::new(),
+            gate_cmd: None,
         };
         for agent_id in Self::RACE_AGENTS {
             if self.registry.find_by_id(agent_id).is_none() {
@@ -299,6 +300,7 @@ impl App {
                         branch,
                         worktree: wt,
                         status: Some(crate::core::agent::AgentStatus::Working),
+                        gate_ok: None,
                         winner: false,
                         promoted: false,
                     });
@@ -352,8 +354,9 @@ impl App {
         }
     }
 
-    /// Promote contestant `idx`: merge its branch, close + clean up the rest.
-    pub fn race_winner(&mut self, idx: usize) {
+    /// Promote contestant `idx`: quality-gate its worktree, then merge the
+    /// branch and clean up the losers. `force` skips gating.
+    pub fn race_winner(&mut self, idx: usize, force: bool) {
         let Some(race) = &self.race else {
             self.status_message = "race: no active race".to_string();
             return;
@@ -363,20 +366,51 @@ impl App {
             return;
         }
         let branch = race.contestants[idx].branch.clone();
+        let worktree = race.contestants[idx].worktree.clone();
+        let agent = race.contestants[idx].agent_id.clone();
+
+        // Gate first (unless forced): a failed gate blocks promotion.
+        if !force {
+            let gate_cmd = race
+                .gate_cmd
+                .clone()
+                .unwrap_or_else(|| default_gate_cmd(&worktree).to_string());
+            match run_gate_in_dir(&worktree, &gate_cmd) {
+                Ok(true) => {
+                    self.race_set_gate(idx, true);
+                    self.status_message = format!("race gate passed for {agent} — merging…");
+                }
+                Ok(false) => {
+                    self.race_set_gate(idx, false);
+                    self.status_message = format!(
+                        "race winner blocked: gate failed for {agent} (:race winner {idx} force)"
+                    );
+                    return;
+                }
+                Err(e) => {
+                    self.race_set_gate(idx, false);
+                    self.status_message = format!("race gate error: {e}");
+                    return;
+                }
+            }
+        }
+
         match crate::core::worktree::merge_branch(&self.cwd, &branch) {
             Ok(()) => {
-                let losers: Vec<(usize, std::path::PathBuf)> = race
-                    .contestants
-                    .iter()
-                    .enumerate()
-                    .filter(|(i, _)| *i != idx && !race.contestants[*i].promoted)
-                    .map(|(_, c)| (c.pane_id, c.worktree.clone()))
-                    .collect();
+                let losers: Vec<(usize, std::path::PathBuf)> = {
+                    let race = self.race.as_ref().expect("race open");
+                    race.contestants
+                        .iter()
+                        .enumerate()
+                        .filter(|(i, c)| *i != idx && !c.promoted)
+                        .map(|(_, c)| (c.pane_id, c.worktree.clone()))
+                        .collect()
+                };
                 for (pane_id, wt) in losers {
                     self.close_pane_by_id(pane_id);
                     let _ = crate::core::worktree::remove_worktree(&self.cwd, &wt);
                 }
-                let winner = &mut self.race.as_mut().expect("checked above").contestants[idx];
+                let winner = &mut self.race.as_mut().expect("race open").contestants[idx];
                 winner.winner = true;
                 winner.promoted = true;
                 winner.status = Some(crate::core::agent::AgentStatus::Done);
@@ -387,6 +421,65 @@ impl App {
         }
     }
 
+    fn race_set_gate(&mut self, idx: usize, ok: bool) {
+        if let Some(race) = &mut self.race {
+            if let Some(c) = race.contestants.get_mut(idx) {
+                c.gate_ok = Some(ok);
+            }
+        }
+    }
+
+    /// Manually run the quality gate in one contestant's worktree.
+    pub fn race_gate(&mut self, idx: usize) {
+        let Some(race) = &self.race else {
+            self.status_message = "race: no active race".to_string();
+            return;
+        };
+        if idx >= race.contestants.len() {
+            self.status_message = format!("race: invalid contestant {idx}");
+            return;
+        }
+        let cmd = race
+            .gate_cmd
+            .clone()
+            .unwrap_or_else(|| default_gate_cmd(&race.contestants[idx].worktree).to_string());
+        let worktree = race.contestants[idx].worktree.clone();
+        let agent = race.contestants[idx].agent_id.clone();
+        match run_gate_in_dir(&worktree, &cmd) {
+            Ok(ok) => {
+                self.race_set_gate(idx, ok);
+                self.status_message = format!(
+                    "race gate for {agent}: {}",
+                    if ok { "passed" } else { "FAILED" }
+                );
+            }
+            Err(e) => self.status_message = format!("race gate error: {e}"),
+        }
+    }
+}
+
+/// Default gate command for a race worktree: `cargo test` for Rust repos,
+/// vacuously pass otherwise.
+fn default_gate_cmd(worktree: &std::path::Path) -> &'static str {
+    if worktree.join("Cargo.toml").exists() {
+        "cargo test"
+    } else {
+        "true"
+    }
+}
+
+/// Run a gate command in a directory; Ok(true) = pass, Ok(false) = fail.
+fn run_gate_in_dir(dir: &std::path::Path, cmd: &str) -> Result<bool, String> {
+    let out = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(cmd)
+        .current_dir(dir)
+        .output()
+        .map_err(|e| e.to_string())?;
+    Ok(out.status.success())
+}
+
+impl App {
     pub fn execute_command(&mut self, cmd: &str) {
         let parts: Vec<&str> = cmd.split_whitespace().collect();
         if parts.is_empty() {
@@ -761,9 +854,23 @@ impl App {
                         .unwrap_or_else(|| "no active race".to_string());
                 } else if parts.len() >= 3 && parts[1] == "winner" {
                     if let Ok(i) = parts[2].parse::<usize>() {
-                        self.race_winner(i);
+                        self.race_winner(i, parts.get(3).copied() == Some("force"));
                     } else {
-                        self.status_message = "usage: race winner <idx>".to_string();
+                        self.status_message = "usage: race winner <idx> [force]".to_string();
+                    }
+                } else if parts.len() >= 3 && parts[1] == "gate" {
+                    if let Ok(i) = parts[2].parse::<usize>() {
+                        self.race_gate(i);
+                    } else {
+                        self.status_message = "usage: race gate <idx>".to_string();
+                    }
+                } else if parts.len() >= 3 && parts[1] == "gate-cmd" {
+                    let cmd = parts[2..].join(" ");
+                    self.status_message = format!("race gate command set: {cmd}");
+                    if let Some(r) = &mut self.race {
+                        r.gate_cmd = Some(cmd);
+                    } else {
+                        self.status_message = "race: no active race".to_string();
                     }
                 } else if parts.len() >= 2 && parts[1] == "cancel" {
                     self.race_cancel();
@@ -1635,5 +1742,148 @@ mod inline_delegation_tests {
         assert_eq!(parse_inline_delegate(""), None);
         assert_eq!(parse_inline_delegate("=notanum hi"), None);
         assert_eq!(parse_inline_delegate("== hi"), None);
+    }
+}
+
+#[cfg(test)]
+mod race_gate_tests {
+    use super::*;
+    use crate::core::agent::AgentStatus;
+    use crate::core::race::{Race, RaceContestant};
+    use std::path::PathBuf;
+    use std::process::Command;
+
+    fn make_repo(suffix: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("term-race-gate-repo-{suffix}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for c in [
+            ["init"].as_slice(),
+            ["config", "user.email", "t@t.com"].as_slice(),
+            ["config", "user.name", "t"].as_slice(),
+        ] {
+            Command::new("git")
+                .args(c)
+                .current_dir(&dir)
+                .output()
+                .unwrap();
+        }
+        std::fs::write(dir.join("a.txt"), "hi").unwrap();
+        Command::new("git")
+            .args(["add", "."])
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "-m", "init"])
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        dir
+    }
+
+    fn contestant(worktree: PathBuf, branch: &str) -> RaceContestant {
+        RaceContestant {
+            agent_id: "claude".to_string(),
+            pane_id: 999_999, // no such pane — focused on gate/merge logic
+            branch: branch.to_string(),
+            worktree,
+            status: Some(AgentStatus::Working),
+            gate_ok: None,
+            winner: false,
+            promoted: false,
+        }
+    }
+
+    #[test]
+    fn winner_blocked_by_failing_gate_then_promoted_after_pass() {
+        let app_cwd = make_repo("1");
+        let mut a = App::new(crate::config::Config::default());
+        a.cwd = app_cwd.clone();
+
+        let wt = crate::core::worktree::worktree_base(&a.cwd).join("race-gate-test");
+        crate::core::worktree::create_worktree(&a.cwd, "race-gate-test", &wt).unwrap();
+
+        let mut race = Race {
+            prompt: "fix it".to_string(),
+            contestants: vec![contestant(wt, "race-gate-test")],
+            gate_cmd: Some("false".to_string()), // failing gate
+        };
+        race.contestants[0].pane_id = race.contestants[0].pane_id; // keep
+        a.race = Some(race);
+
+        // Failing gate must refuse the merge and flag the contestant.
+        a.race_winner(0, false);
+        assert_eq!(a.race.as_ref().unwrap().contestants[0].gate_ok, Some(false));
+        assert!(!a.race.as_ref().unwrap().contestants[0].winner);
+        assert!(a.status_message.contains("gate failed"));
+
+        // force skips the gate and merges.
+        a.race_winner(0, true);
+        let c = &a.race.as_ref().unwrap().contestants[0];
+        assert!(c.winner && c.promoted);
+        assert!(a.status_message.contains("race winner"));
+        let _ = std::fs::remove_dir_all(&app_cwd);
+    }
+
+    #[test]
+    fn passing_gate_proceeds_to_merge() {
+        let app_cwd = make_repo("2");
+        let mut a = App::new(crate::config::Config::default());
+        a.cwd = app_cwd.clone();
+
+        let wt = crate::core::worktree::worktree_base(&a.cwd).join("race-gate-test2");
+        crate::core::worktree::create_worktree(&a.cwd, "race-gate-test2", &wt).unwrap();
+
+        a.race = Some(Race {
+            prompt: "fix it".to_string(),
+            contestants: vec![contestant(wt, "race-gate-test2")],
+            gate_cmd: Some("true".to_string()), // passing gate
+        });
+
+        a.race_winner(0, false);
+        let c = &a.race.as_ref().unwrap().contestants[0];
+        assert_eq!(c.gate_ok, Some(true));
+        assert!(
+            c.winner && c.promoted,
+            "winner not set: {}",
+            a.status_message
+        );
+        let _ = std::fs::remove_dir_all(&app_cwd);
+    }
+
+    #[test]
+    fn default_gate_cmd_heuristic() {
+        let dir = std::env::temp_dir().join("term-gate-heur");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        assert_eq!(default_gate_cmd(&dir), "true");
+        std::fs::write(dir.join("Cargo.toml"), "[package]").unwrap();
+        assert_eq!(default_gate_cmd(&dir), "cargo test");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn race_gate_reports_result() {
+        let app_cwd = make_repo("3");
+        let mut a = App::new(crate::config::Config::default());
+        a.cwd = app_cwd.clone();
+
+        let wt = crate::core::worktree::worktree_base(&a.cwd).join("race-gate-test3");
+        crate::core::worktree::create_worktree(&a.cwd, "race-gate-test3", &wt).unwrap();
+        a.race = Some(Race {
+            prompt: "p".to_string(),
+            contestants: vec![contestant(wt, "race-gate-test3")],
+            gate_cmd: Some("true".to_string()),
+        });
+
+        a.race_gate(0);
+        assert_eq!(a.race.as_ref().unwrap().contestants[0].gate_ok, Some(true));
+        assert!(a.status_message.contains("passed"));
+
+        // invalid index is a safe no-op
+        a.race_gate(7);
+        assert!(a.status_message.contains("invalid contestant"));
+        let _ = std::fs::remove_dir_all(&app_cwd);
     }
 }
