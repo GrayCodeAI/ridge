@@ -246,7 +246,9 @@ fn render_git(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_diff(f: &mut Frame, app: &App, area: Rect) {
-    let block = Block::default().borders(Borders::ALL).title(" Diff ");
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Diff (j/k scroll) ");
     let inner = block.inner(area);
     f.render_widget(block, area);
 
@@ -255,45 +257,70 @@ fn render_diff(f: &mut Frame, app: &App, area: Rect) {
     let untracked = crate::core::git::untracked(&app.cwd);
     let conflicted = crate::core::git::conflicted(&app.cwd);
 
-    let text = format!(
-        "=== Staged ===\n{}\n\n=== Worktree ===\n{}\n\n=== Untracked ===\n{}\n\n=== Conflicted ===\n{}",
-        if staged.is_empty() {
-            "(none)".to_string()
+    let mut lines: Vec<Line> = Vec::new();
+    let push_section = |title: &str, body: &String, lines: &mut Vec<Line>| {
+        lines.push(Line::from(Span::styled(
+            format!("=== {} ===", title),
+            Style::default().fg(Color::Cyan),
+        )));
+        if body.is_empty() {
+            lines.push(Line::from(Span::styled(
+                "(none)",
+                Style::default().fg(Color::DarkGray),
+            )));
         } else {
-            staged
-        },
-        if worktree.is_empty() {
-            "(none)".to_string()
-        } else {
-            worktree
-        },
-        if untracked.is_empty() {
-            "(none)".to_string()
-        } else {
-            untracked
-        },
-        if conflicted.is_empty() {
-            "(none)".to_string()
-        } else {
-            conflicted
+            for raw in body.lines().take(10_000) {
+                let style = match raw {
+                    r if r.starts_with("+++") || r.starts_with("---") => {
+                        Style::default().fg(Color::Blue)
+                    }
+                    r if r.starts_with("@@") => Style::default().fg(Color::Cyan),
+                    r if r.starts_with('+') => Style::default().fg(Color::Green),
+                    r if r.starts_with('-') => Style::default().fg(Color::Red),
+                    r if r.starts_with("diff ") || r.starts_with("index ") => {
+                        Style::default().fg(Color::Magenta)
+                    }
+                    _ => Style::default().fg(Color::White),
+                };
+                lines.push(Line::from(Span::styled(raw.to_string(), style)));
+            }
         }
-    );
-    let para = Paragraph::new(text).style(Style::default().fg(Color::White));
+        lines.push(Line::from(""));
+    };
+    push_section("Staged", &staged, &mut lines);
+    push_section("Worktree", &worktree, &mut lines);
+    push_section("Untracked", &untracked, &mut lines);
+    push_section("Conflicted", &conflicted, &mut lines);
+
+    let total = lines.len();
+    let max_scroll = total.saturating_sub(inner.height as usize);
+    let para = Paragraph::new(lines).scroll((app.diff_scroll.min(max_scroll) as u16, 0));
     f.render_widget(para, inner);
 }
 
 fn render_files(f: &mut Frame, app: &App, area: Rect) {
-    let block = Block::default().borders(Borders::ALL).title(" Files ");
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Files (j/k scroll) ");
     let inner = block.inner(area);
     f.render_widget(block, area);
 
     let out = crate::core::git::run_git(&app.cwd, &["ls-files"]);
-    let text = if out.is_empty() {
-        "(no tracked files or not a git repo)".to_string()
+    let lines: Vec<Line> = if out.is_empty() {
+        vec![Line::from(Span::styled(
+            "(no tracked files or not a git repo)",
+            Style::default().fg(Color::DarkGray),
+        ))]
     } else {
-        out
+        out.lines()
+            .take(10_000)
+            .map(|l| Line::from(l.to_string()))
+            .collect()
     };
-    let para = Paragraph::new(text).style(Style::default().fg(Color::White));
+
+    let total = lines.len();
+    let max_scroll = total.saturating_sub(inner.height as usize);
+    let para = Paragraph::new(lines).scroll((app.files_scroll.min(max_scroll) as u16, 0));
     f.render_widget(para, inner);
 }
 

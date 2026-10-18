@@ -105,6 +105,9 @@ pub struct App {
     pub search_buffer: String,
     pub search_results: Vec<String>,
 
+    pub diff_scroll: usize,
+    pub files_scroll: usize,
+
     pub module_outputs: Vec<(String, String)>,
 
     pub task_board: crate::core::orchestration::TaskBoard,
@@ -132,6 +135,8 @@ impl App {
             search_results: Vec::new(),
 
             module_outputs: crate::core::modules::run_all(),
+            diff_scroll: 0,
+            files_scroll: 0,
             task_board: crate::core::orchestration::TaskBoard::load(
                 &std::env::current_dir().unwrap_or_default(),
             ),
@@ -720,6 +725,23 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
         (KeyCode::Char('4'), _) => app.current_tab = Tab::Files,
         (KeyCode::Char('5'), _) => app.current_tab = Tab::Orchestration,
         (KeyCode::Char('6'), _) => app.current_tab = Tab::Settings,
+        // Scroll Diff / Files tabs.
+        (KeyCode::Up, _) if app.current_tab == Tab::Diff => {
+            app.diff_scroll = app.diff_scroll.saturating_sub(1)
+        }
+        (KeyCode::Down, _) if app.current_tab == Tab::Diff => app.diff_scroll += 1,
+        (KeyCode::Char('k'), _) if app.current_tab == Tab::Diff => {
+            app.diff_scroll = app.diff_scroll.saturating_sub(1)
+        }
+        (KeyCode::Char('j'), _) if app.current_tab == Tab::Diff => app.diff_scroll += 1,
+        (KeyCode::Up, _) if app.current_tab == Tab::Files => {
+            app.files_scroll = app.files_scroll.saturating_sub(1)
+        }
+        (KeyCode::Down, _) if app.current_tab == Tab::Files => app.files_scroll += 1,
+        (KeyCode::Char('k'), _) if app.current_tab == Tab::Files => {
+            app.files_scroll = app.files_scroll.saturating_sub(1)
+        }
+        (KeyCode::Char('j'), _) if app.current_tab == Tab::Files => app.files_scroll += 1,
         // Pane management
         (KeyCode::Char('n'), _) => {
             let cwd = std::env::current_dir().unwrap_or_default();
