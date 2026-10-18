@@ -40,6 +40,9 @@ pub struct Task {
 pub struct TaskBoard {
     pub tasks: Vec<Task>,
     next_id: u64,
+    /// Optional active filter: status label (pending/running/...) or title substring.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filter: Option<String>,
 }
 
 impl TaskBoard {
@@ -225,6 +228,11 @@ impl TaskBoard {
     pub fn render(&self) -> String {
         let mut out = String::new();
         for t in &self.tasks {
+            if let Some(f) = &self.filter {
+                if t.status.label() != f.as_str() && !t.title.contains(f.as_str()) {
+                    continue;
+                }
+            }
             let leases = if t.leased_paths.is_empty() {
                 String::new()
             } else {
@@ -299,5 +307,32 @@ mod extra_tests {
         let k = board.render_kanban();
         assert!(k.contains("Pending"));
         assert!(k.contains("a"));
+    }
+}
+
+#[cfg(test)]
+mod filter_tests {
+    use super::*;
+
+    #[test]
+    fn filter_by_status_and_text() {
+        let mut b = TaskBoard::new();
+        b.add("alpha work".into(), vec![], None);
+        let id2 = b.add("beta setup".into(), vec![], None);
+        b.complete_task(id2, true);
+
+        b.filter = Some("done".into());
+        let r = b.render();
+        assert!(r.contains("beta"), "done task shown: {r}");
+        assert!(!r.contains("alpha"), "pending hidden: {r}");
+
+        b.filter = Some("alpha".into());
+        let r = b.render();
+        assert!(r.contains("alpha"));
+        assert!(!r.contains("beta"));
+
+        b.filter = None;
+        let r = b.render();
+        assert!(r.contains("alpha") && r.contains("beta"));
     }
 }

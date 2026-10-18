@@ -17,6 +17,7 @@ Type `:` to enter command mode.
 - `task lease <id> <paths...>` — lease paths
 - `task gate <id>` — run quality gate
 - `task merge <id>` — merge branch
+- `task filter <status|text|all>` — filter the board view
 - `task kanban` — show kanban
 - `task fanout <prompt>` — fan out to multiple agents
 - `task subagent <parent> <agent>` — spawn subagent

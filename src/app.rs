@@ -66,6 +66,7 @@ pub struct Pane {
     pub children: Vec<usize>,
     pub input_buffer: String,
     pub attention: bool,
+    pub session_id: Option<String>,
 }
 
 impl Pane {
@@ -81,6 +82,7 @@ impl Pane {
             children: Vec::new(),
             input_buffer: String::new(),
             attention: false,
+            session_id: None,
         }
     }
 }
@@ -197,6 +199,8 @@ impl App {
                 let mut pane = Pane::new(id, format!("{} #{}", agent.name(), id));
                 pane.agent_id = Some(agent_id.to_string());
                 pane.pty = Some(pty);
+                pane.session_id = crate::core::session::latest_session_file(agent, &cwd)
+                    .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().to_string()));
                 pane.parent_pane = parent;
                 pane.status = AgentStatus::Working;
                 self.panes.push(pane);
@@ -442,6 +446,22 @@ impl App {
                             Err(e) => self.status_message = format!("gate error: {e}"),
                         }
                     }
+                } else if parts.len() >= 3 && parts[1] == "filter" {
+                    let f = parts[2].to_string();
+                    self.task_board.filter = if f == "all" { None } else { Some(f.clone()) };
+                    let shown = self
+                        .task_board
+                        .tasks
+                        .iter()
+                        .filter(|t| match &self.task_board.filter {
+                            None => true,
+                            Some(f) => t.status.label() == f || t.title.contains(f),
+                        })
+                        .count();
+                    self.status_message = format!(
+                        "filter set to {} ({shown} matching) — :task filter all to clear",
+                        self.task_board.filter.as_deref().unwrap_or("none")
+                    );
                 } else if parts.len() >= 3 && parts[1] == "kanban" {
                     self.status_message = self.task_board.render_kanban();
                 } else if parts.len() >= 3 && parts[1] == "subagent" {
@@ -1047,7 +1067,8 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
                                 let new_id = app.next_pane_id;
                                 app.next_pane_id += 1;
                                 let mut new_pane = Pane::new(new_id, format!("{id} (resumed)"));
-                                new_pane.agent_id = Some(id);
+                                new_pane.agent_id = Some(id.clone());
+                                new_pane.session_id = Some(format!("last({id})"));
                                 new_pane.pty = Some(pty);
                                 new_pane.status = AgentStatus::Working;
                                 app.panes.push(new_pane);
