@@ -1,6 +1,6 @@
 [package]
 name = "term"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 description = "Mission control for your AI agents. Terminal-native TUI with 11 agent adapters, task orchestration, diff review, and session management."
 license = "MIT"

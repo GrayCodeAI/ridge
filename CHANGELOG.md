@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.4.0
+
+- Race quality gates (`:race gate <idx>` / `:race winner <idx> [force]` / `:race gate-cmd <cmd>`): winner promotion is gated — `cargo test` by default in Rust worktrees; gate ✓/✗ shown per contestant; `force` overrides
+- Reply → task promotion: `:task from-inbox <n>` turns a captured reply into an orchestration task; new persisted `Task.notes` field, board shows ` [reply: …]`
+- Wait-for-human queue (`:queue <pane> <msg>`): prompts parked per pane are delivered automatically the next time that agent blocks, recorded in the reply inbox; `:queue list | drop | clear`, Orchestration-tab Queue section, stale prompts auto-dropped
+- 44 unit tests (race gate integration in real temp git repos, inbox-threading, queue lifecycle/delivery)
+
 ## v0.3.0
 
 - Fan-out races (`:race <prompt>`): claude/codex/opencode each race in their own git worktree + branch; `:race winner <idx>` merges the winner and cleans up losers; statuses mirrored live in the Orchestration tab
