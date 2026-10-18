@@ -1,0 +1,32 @@
+[package]
+name = "term"
+version = "0.1.0"
+edition = "2024"
+description = "Mission control for your AI agents. Terminal-native TUI."
+license = "MIT"
+repository = "https://github.com/gryacodeai/term"
+authors = ["Gryacodeai"]
+
+[[bin]]
+name = "term"
+path = "src/main.rs"
+
+[dependencies]
+ratatui = "0.29"
+crossterm = "0.28"
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+anyhow = "1"
+portable-pty = "0.8"
+vt100 = "0.15"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
