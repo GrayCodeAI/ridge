@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.6.0
+
+- Dashboard tab (`7`): single-glance mission-control summary — pane counts (blocked/working/idle/error) with cost, per-pane blocked detail (⚠ attention, `a` jumps), race state (racing / gated / WON BY), queue + inbox counters, task status breakdown with ready-to-start list, module output count; rendered purely from live state (no subprocesses in the draw path)
+- 55 unit tests (dashboard derivation covering every subsystem + empty-state degradation)
+
 ## v0.5.0
 
 - Race leaderboard: race outcomes persisted to `<repo>/.term-races.json` (last 50), `:race leaderboard` aggregates wins per agent and lists the three most recent races (with `[forced]` markers)
