@@ -32,4 +32,6 @@ echo "panes=$TERM_JSON"   # {"panes":2,"blocked":1,"tasks":5}
 Modules are refreshed every 20 ticks (~5 seconds). Output is displayed in the Settings tab under "Modules".
 
 ## Marketplace
+
+`:module install <raw-url> [name]` downloads a script into ~/.config/term/modules/ (via curl, made executable). `:module list` / `:module remove <name>` manage them. Only install scripts you have read and trust — modules run with your user privileges.
 A module registry is planned for v1.0.

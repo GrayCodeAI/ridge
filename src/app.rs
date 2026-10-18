@@ -522,9 +522,91 @@ impl App {
                     self.status_message = help;
                 }
             }
+            "module" => {
+                let dir = crate::core::modules::modules_dir();
+                let _ = std::fs::create_dir_all(&dir);
+                if parts.len() >= 2 && parts[1] == "list" {
+                    let mods = crate::core::modules::discover();
+                    let mut msg = String::from("installed modules:\n");
+                    for m in mods {
+                        msg.push_str(&format!(
+                            "  {}\n",
+                            m.file_name().unwrap_or_default().to_string_lossy()
+                        ));
+                    }
+                    self.status_message = msg;
+                } else if parts.len() >= 4 && parts[1] == "install" {
+                    let url = parts[2].to_string();
+                    let name = parts.get(3).map(|s| s.to_string()).unwrap_or_else(|| {
+                        url.rsplit('/').next().unwrap_or("module.sh").to_string()
+                    });
+                    let dest = dir.join(&name);
+                    let out = std::process::Command::new("curl")
+                        .arg("-fsSL")
+                        .arg(&url)
+                        .arg("-o")
+                        .arg(&dest)
+                        .output();
+                    match out {
+                        Ok(o) if o.status.success() => {
+                            #[cfg(unix)]
+                            {
+                                use std::os::unix::fs::PermissionsExt;
+                                let _ = std::fs::set_permissions(
+                                    &dest,
+                                    std::fs::Permissions::from_mode(0o755),
+                                );
+                            }
+                            self.status_message = format!("installed module: {name}");
+                        }
+                        Ok(o) => {
+                            let _ = std::fs::remove_file(&dest);
+                            self.status_message = format!("install failed (curl {:?})", o.status);
+                        }
+                        Err(e) => self.status_message = format!("install error: {e}"),
+                    }
+                } else if parts.len() >= 3 && parts[1] == "remove" {
+                    let dest = dir.join(parts[2]);
+                    match std::fs::remove_file(&dest) {
+                        Ok(()) => self.status_message = format!("removed module {}", parts[2]),
+                        Err(e) => self.status_message = format!("remove failed: {e}"),
+                    }
+                } else {
+                    self.status_message =
+                        "usage: module list | install <url> [name] | remove <name>".to_string();
+                }
+            }
+            "ssh" => {
+                if parts.len() >= 2 {
+                    let host = parts[1].to_string();
+                    let mut cmd = portable_pty::CommandBuilder::new("ssh");
+                    for a in &parts[1..] {
+                        cmd.arg(*a);
+                    }
+                    cmd.cwd(self.cwd.clone());
+                    let id = self.next_pane_id;
+                    self.next_pane_id += 1;
+                    match PtySession::spawn(cmd, 24, 80) {
+                        Ok(pty) => {
+                            let mut pane = Pane::new(id, format!("ssh {host} #{id}"));
+                            pane.agent_id = Some("ssh".to_string());
+                            pane.pty = Some(pty);
+                            pane.status = AgentStatus::Working;
+                            self.panes.push(pane);
+                            self.active_pane = self.panes.len() - 1;
+                            self.status_message = format!("ssh pane {id} started for {host}");
+                        }
+                        Err(e) => {
+                            self.status_message = format!("ssh spawn failed: {e}");
+                        }
+                    }
+                } else {
+                    self.status_message = "usage: ssh <host> [args...]".to_string();
+                }
+            }
             "help" => {
                 self.status_message =
-                    "commands: spawn <agent>, close, delegate <pane> <msg>, broadcast <msg>, session save/clear, export costs/session, account list/add/env/show, config show/theme, task add/start/done/lease/gate/merge/kanban/fanout, branch".to_string();
+                    "commands: spawn <agent>, close, delegate <pane> <msg>, broadcast <msg>, session save/clear, export costs/session, module list/install <url> [name]/remove <name>, ssh <host>, account list/add/env/show, config show/theme, task add/start/done/lease/gate/merge/filter/kanban/fanout, branch".to_string();
             }
             other => {
                 self.status_message = format!("unknown command: {other}");
