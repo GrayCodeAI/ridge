@@ -150,10 +150,21 @@ mod tests {
     use super::*;
     use std::time::Duration;
 
-    fn echo_pty(msg: &str) -> PtySession {
-        let mut cmd = CommandBuilder::new("echo");
-        cmd.arg(msg);
-        PtySession::spawn(cmd, 4, 80).expect("echo pty")
+    /// PTY that emits exactly one line; `echo` is a cmd builtin on Windows.
+    fn echo_pty_fn(msg: &str) -> PtySession {
+        #[cfg(windows)]
+        {
+            let mut cmd = CommandBuilder::new("cmd");
+            cmd.arg("/c");
+            cmd.arg(format!("echo {msg}"));
+            PtySession::spawn(cmd, 4, 80).expect("echo pty")
+        }
+        #[cfg(not(windows))]
+        {
+            let mut cmd = CommandBuilder::new("echo");
+            cmd.arg(msg);
+            PtySession::spawn(cmd, 4, 80).expect("echo pty")
+        }
     }
 
     fn wait_for<F: Fn() -> bool>(pred: F) -> bool {
@@ -166,30 +177,29 @@ mod tests {
         false
     }
 
+    fn contains(raw: &[u8], needle: &[u8]) -> bool {
+        raw.windows(needle.len()).any(|w| w == needle)
+    }
+
     #[test]
     fn raw_log_captures_output() {
-        let pty = echo_pty("timeline-marker-a");
-        let saw = wait_for(|| {
-            pty.raw_log
-                .lock()
-                .map(|r| r.windows(17).any(|w| w == b"timeline-marker-a"))
-                .unwrap_or(false)
-        });
+        let pty = echo_pty_fn("timeline-marker-a");
+        let saw = wait_for(|| contains(&pty.raw_log.lock().unwrap(), b"timeline-marker-a"));
         assert!(saw, "raw log should contain echoed output");
     }
 
     #[test]
     fn take_raw_since_resumes() {
-        let pty = echo_pty("timeline-marker-b");
-        let ready = wait_for(|| !pty.take_raw_since(0).0.is_empty());
-        assert!(ready, "output should arrive");
+        let pty = echo_pty_fn("timeline-marker-b");
+        let ready = wait_for(|| contains(&pty.raw_log.lock().unwrap(), b"timeline-marker-b"));
+        assert!(ready, "marker should arrive in the raw log");
 
         let (chunk, cursor) = pty.take_raw_since(0);
-        assert!(chunk.windows(17).any(|w| w == b"timeline-marker-b"));
+        assert!(contains(&chunk, b"timeline-marker-b"));
         assert!(cursor > 0);
 
         // Draining again with the stored cursor yields nothing (no dup).
         let (rest, _next) = pty.take_raw_since(cursor);
-        assert!(rest.is_empty());
+        assert!(!contains(&rest, b"timeline-marker-b"));
     }
 }

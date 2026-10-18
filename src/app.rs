@@ -2858,10 +2858,25 @@ mod dashboard_json_tests {
         assert_eq!(v["queue"].as_array().unwrap().len(), 0);
     }
 
+    /// PTY that emits exactly one line; `echo` is a cmd builtin on Windows.
     fn echo_pty_app(msg: &str) -> PtySession {
-        let mut cmd = portable_pty::CommandBuilder::new("echo");
-        cmd.arg(msg);
-        PtySession::spawn(cmd, 4, 80).expect("echo pty")
+        #[cfg(windows)]
+        {
+            let mut cmd = portable_pty::CommandBuilder::new("cmd");
+            cmd.arg("/c");
+            cmd.arg(format!("echo {msg}"));
+            PtySession::spawn(cmd, 4, 80).expect("echo pty")
+        }
+        #[cfg(not(windows))]
+        {
+            let mut cmd = portable_pty::CommandBuilder::new("echo");
+            cmd.arg(msg);
+            PtySession::spawn(cmd, 4, 80).expect("echo pty")
+        }
+    }
+
+    fn contains(raw: &[u8], needle: &[u8]) -> bool {
+        raw.windows(needle.len()).any(|w| w == needle)
     }
 
     fn sleep_pty_app() -> PtySession {
@@ -2881,7 +2896,7 @@ mod dashboard_json_tests {
         a.panes.push(pane);
         a.active_pane = 0;
 
-        // Wait for the reader thread to capture output.
+        // Wait for the reader thread to capture the marker.
         let saw = (0..100).any(|_| {
             let got = a.panes[0]
                 .pty
@@ -2889,7 +2904,7 @@ mod dashboard_json_tests {
                 .unwrap()
                 .raw_log
                 .lock()
-                .map(|r| !r.is_empty())
+                .map(|raw| contains(&raw, b"timeline-marker-42"))
                 .unwrap_or(false);
             if got {
                 true
@@ -2898,26 +2913,31 @@ mod dashboard_json_tests {
                 false
             }
         });
-        assert!(saw, "raw log should receive output");
+        assert!(saw, "raw log should receive the marker");
 
         a.timelines_tick_into(&base);
         let log = Pane::timeline_path_under(2, &base);
-        let data = std::fs::read_to_string(&log).expect("timeline log written");
-        assert_eq!(
-            data.matches("timeline-marker-42").count(),
-            1,
-            "marker captured exactly once"
-        );
-        assert_eq!(
-            a.panes[0].timeline_cursor,
-            a.panes[0].timeline_cursor.max(1)
-        );
-
-        // Second tick: no duplication.
-        a.timelines_tick_into(&base);
-        let data2 = std::fs::read_to_string(&log).unwrap();
-        assert_eq!(data2.matches("timeline-marker-42").count(), 1);
+        let read_count = || {
+            std::fs::read_to_string(&log)
+                .map(|d| d.matches("timeline-marker-42").count())
+                .unwrap_or(0)
+        };
+        // Drain until the marker lands in the file (chunks may split).
+        let landed = (0..50).any(|_| {
+            if read_count() > 0 {
+                true
+            } else {
+                a.timelines_tick_into(&base);
+                false
+            }
+        });
+        assert!(landed, "timeline log should contain the marker");
+        assert_eq!(read_count(), 1, "marker captured exactly once");
         assert!(a.panes[0].timeline_cursor > 0);
+
+        // Further ticks never duplicate content.
+        a.timelines_tick_into(&base);
+        assert_eq!(read_count(), 1, "no duplication on repeat ticks");
     }
 
     #[test]
