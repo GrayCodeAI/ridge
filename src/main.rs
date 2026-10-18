@@ -1,4 +1,6 @@
 #![allow(dead_code)]
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::uninlined_format_args)]
 use anyhow::Result;
 use clap::Parser;
 use tracing_subscriber::EnvFilter;
