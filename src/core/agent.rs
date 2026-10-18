@@ -85,6 +85,13 @@ impl AgentRegistry {
         reg.register(Box::new(crate::agents::claude::ClaudeAgent));
         reg.register(Box::new(crate::agents::codex::CodexAgent));
         reg.register(Box::new(crate::agents::opencode::OpenCodeAgent));
+        reg.register(Box::new(crate::agents::gemini::GeminiAgent));
+        reg.register(Box::new(crate::agents::copilot::CopilotAgent));
+        reg.register(Box::new(crate::agents::aider::AiderAgent));
+        reg.register(Box::new(crate::agents::kimi::KimiAgent));
+        reg.register(Box::new(crate::agents::pi::PiAgent));
+        reg.register(Box::new(crate::agents::grok::GrokAgent));
+        reg.register(Box::new(crate::agents::cursor::CursorAgent));
         reg.register(Box::new(crate::agents::generic::GenericAgent));
         reg
     }
