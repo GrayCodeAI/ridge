@@ -13,7 +13,7 @@ Type `:` to enter command mode.
 - `module list / install <url> [name] / remove <name>` — literally install module scripts
 - `ssh <host> [args]` — open a remote shell pane over SSH
 - `worktree list / add <branch> / remove <path>` — manage git worktrees
-- `config show / config theme <n>`
+- `config show / config theme <n> / config notify on|off` — show config, set theme, toggle OS notifications (fires on blocked/finished agents; notify-send on Linux, osascript on macOS)
 - `task add <title>` — add task
 - `task start <id> [agent]` — start task (creates worktree)
 - `task done <id>` — mark done
