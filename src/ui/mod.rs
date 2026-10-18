@@ -346,8 +346,14 @@ fn render_status(f: &mut Frame, app: &App, area: Rect) {
     } else {
         String::new()
     };
+    let total_cost: f64 = app.panes.iter().map(|p| p.cost_usd).sum();
+    let cost_str = if total_cost > 0.0 {
+        format!("  ${:.2}  ", total_cost)
+    } else {
+        String::new()
+    };
     let left = Span::styled(
-        format!(" {}{} ", app.status_message, blocked_str),
+        format!(" {}{}{} ", app.status_message, blocked_str, cost_str),
         Style::default().fg(Color::White),
     );
     let right = Span::styled(
