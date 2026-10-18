@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.0
+
+- Session timeline capture (`:timeline`): every live pane's raw PTY output is logged continuously to `<data_dir>/timelines/pane-<id>.log` (8 MiB in-memory window; append-only on disk) for post-mortems — `cat`/`less` the log to replay what an agent did while you were away; `:timeline` lists paths + sizes, `:timeline on|off [<pane>]` pauses/resumes capture, `:timeline export <file>` copies the active pane's log into the repo
+- SSH pane status parity: panes whose agent has no registered adapter (remote `ssh` sessions, bare shells) now get status detection via the generic heuristics — idle shell prompts read as idle, `(y/n)`/permission requests read as blocked, inconclusive output on a live session stays working
+- 67 unit tests (raw-log capture + cursor resume, timeline drain/dedupe into an injected tmpdir, `:timeline` command paths, fallback status matrix)
 ## v0.7.0
 
 - `term --dashboard`: the full mission-control state as pretty JSON — panes (status/cost/attention/session), race + contestant gate results, queue, inbox counters, task-board summary with ready ids, module count, race-history length

@@ -22,6 +22,10 @@ Full mission control: 11 agent adapters (Claude, Codex, OpenCode, Gemini, Copilo
 - `term --dashboard` — full mission-control state as JSON
 - `term --doctor` — check which agent CLIs / tools are installed
 
+## Session timelines
+
+Every pane's raw PTY output is continuously logged to `<data_dir>/timelines/pane-<id>.log` — replay what an agent did while you were away with `less ~/.local/share/term/timelines/pane-1.log`, or `:timeline export postmortem.log`. SSH/remote panes get status detection (blocked/idle/working) via the generic heuristics.
+
 ## Build
 
 ```sh
