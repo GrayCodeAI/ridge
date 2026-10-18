@@ -3,5 +3,6 @@ pub mod git;
 pub mod modules;
 pub mod orchestration;
 pub mod pty;
+pub mod race;
 pub mod session;
 pub mod worktree;

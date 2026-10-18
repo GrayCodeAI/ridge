@@ -53,7 +53,8 @@ term --restore
 - `r` — resume last session
 - `f` — fork active session
 - `[` / `]` — switch active pane
-- `:` — command mode (spawn, close, delegate, task add/start/done, branch, help)
+- `:` — command mode (spawn, close, delegate, task add/start/done, race, branch, help)
+- `:race <prompt>` — fan out to claude/codex/opencode, each in its own worktree + branch; `:race winner <idx>` merges the winner and cleans up losers
 - Typed chars/Enter/Backspace — forwarded to active PTY
 
 ## Tabs

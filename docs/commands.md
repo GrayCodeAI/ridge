@@ -24,6 +24,10 @@ Type `:` to enter command mode.
 - `task kanban` — show kanban
 - `task fanout <prompt>` — fan out to multiple agents
 - `task subagent <parent> <agent>` — spawn subagent
+- `race <prompt>` — start a fan-out race: claude, codex, and opencode each get their own git worktree + branch, and the prompt is delegated to them immediately
+- `race winner <idx>` — merge the winning contestant's branch and clean up the losing panes/worktrees
+- `race cancel` — close all race panes and remove their worktrees
+- `race` / `race status` — show contestants, statuses, and the winner (★)
 - `branch` — show current branch
 - `help` — list commands
 
