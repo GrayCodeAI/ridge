@@ -12,3 +12,6 @@
 - `:` — command mode
 - `=` — delegate mode
 - `/` — search mode
+- `j` / `k` (Diff, Files tabs) — scroll down / up
+- `n` / `p` (Diff tab) — next / previous hunk
+- Up / Down — scroll Diff and Files tabs

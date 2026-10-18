@@ -7,7 +7,8 @@ Type `:` to enter command mode.
 - `delegate <pane> <msg>` — send message to a pane
 - `broadcast <msg>` — send to all panes
 - `session save` / `session clear` — persist or delete saved panes
-- `export costs` — export cost CSV
+- `export costs` — cost CSV
+- `export session <file>` — open-pane snapshot as JSON — export cost CSV
 - `account list` / `account add <agent> <name>`
 - `task add <title>` — add task
 - `task start <id> [agent]` — start task (creates worktree)

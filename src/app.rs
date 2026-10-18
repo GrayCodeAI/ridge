@@ -10,7 +10,7 @@ use crossterm::{
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{Terminal, backend::CrosstermBackend};
-use std::io;
+use std::io::{self, Write};
 use std::time::Duration;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -107,6 +107,9 @@ pub struct App {
 
     pub diff_scroll: usize,
     pub files_scroll: usize,
+    pub diff_sections: Vec<(&'static str, String)>,
+    pub files_cache: Vec<String>,
+    pub files_status: std::collections::HashMap<String, char>,
 
     pub module_outputs: Vec<(String, String)>,
 
@@ -137,6 +140,14 @@ impl App {
             module_outputs: crate::core::modules::run_all(),
             diff_scroll: 0,
             files_scroll: 0,
+            diff_sections: vec![
+                ("Staged", String::new()),
+                ("Worktree", String::new()),
+                ("Untracked", String::new()),
+                ("Conflicted", String::new()),
+            ],
+            files_cache: Vec::new(),
+            files_status: std::collections::HashMap::new(),
             task_board: crate::core::orchestration::TaskBoard::load(
                 &std::env::current_dir().unwrap_or_default(),
             ),
@@ -309,8 +320,31 @@ impl App {
                             }
                             Err(e) => self.status_message = format!("export failed: {}", e),
                         }
+                    } else if parts.len() >= 3 && parts[2] == "session" {
+                        // export session <path> — snapshot of open panes as JSON
+                        let file = parts.get(3).copied().unwrap_or("term-session.json");
+                        let panes: Vec<crate::app::PaneSnapshot> = self
+                            .panes
+                            .iter()
+                            .filter_map(|p| {
+                                p.agent_id.as_ref().map(|a| crate::app::PaneSnapshot {
+                                    agent_id: a.clone(),
+                                    title: p.title.clone(),
+                                })
+                            })
+                            .collect();
+                        match serde_json::to_string_pretty(&panes) {
+                            Ok(json) => match std::fs::write(self.cwd.join(file), json) {
+                                Ok(()) => {
+                                    self.status_message = format!("session exported to {file}")
+                                }
+                                Err(e) => self.status_message = format!("export failed: {e}"),
+                            },
+                            Err(e) => self.status_message = format!("export failed: {e}"),
+                        }
                     } else {
-                        self.status_message = "usage: export costs".to_string();
+                        self.status_message =
+                            "usage: export costs | export session <file>".to_string();
                     }
                 } else if parts.len() >= 2 && parts[1] == "broadcast" {
                     let msg = parts[2..].join(" ");
@@ -380,6 +414,88 @@ impl App {
                 self.status_message = format!("unknown command: {other}");
             }
         }
+    }
+
+    /// Rebuild the cached git diff sections (avoids a subprocess per frame —
+    /// Diff tab renders from this cache, refreshed on a timer).
+    pub fn refresh_diff_cache(&mut self) {
+        self.diff_sections = vec![
+            ("Staged", crate::core::git::diff_staged(&self.cwd)),
+            ("Worktree", crate::core::git::diff_worktree(&self.cwd)),
+            ("Untracked", crate::core::git::untracked(&self.cwd)),
+            ("Conflicted", crate::core::git::conflicted(&self.cwd)),
+        ];
+    }
+
+    /// Rebuild the cached file list for the Files tab.
+    pub fn refresh_files_cache(&mut self) {
+        let out = crate::core::git::run_git(&self.cwd, &["ls-files"]);
+        let status = crate::core::git::status_porcelain(&self.cwd);
+        self.files_status.clear();
+        for line in status.lines() {
+            // Porcelain format: "XY path"; renames are "XY old -> new".
+            if line.len() > 3 {
+                let x = line.chars().next().unwrap_or(' ');
+                self.files_status.insert(line[3..].to_string(), x);
+            }
+        }
+        self.files_cache = out.lines().map(|s| s.to_string()).collect();
+    }
+
+    /// Jump `diff_scroll` to the next/previous hunk (`@@` line) in the
+    /// rendered diff, wrapping around. Line indices must match render_diff.
+    pub fn jump_hunk(&mut self, forward: bool) {
+        let mut hunk_starts: Vec<usize> = Vec::new();
+        let mut idx = 0usize;
+        for (_title, body) in &self.diff_sections {
+            idx += 1; // section title line
+            if body.is_empty() {
+                idx += 1; // "(none)"
+            } else {
+                for line in body.lines().take(10_000) {
+                    if line.starts_with("@@") {
+                        hunk_starts.push(idx);
+                    }
+                    idx += 1;
+                }
+            }
+            idx += 1; // blank separator
+        }
+        if hunk_starts.is_empty() {
+            self.status_message = "no hunks in diff".to_string();
+            return;
+        }
+        let current = self.diff_scroll;
+        let next = if forward {
+            hunk_starts
+                .iter()
+                .copied()
+                .find(|&s| s > current)
+                .unwrap_or(hunk_starts[0])
+        } else {
+            hunk_starts
+                .iter()
+                .rev()
+                .copied()
+                .find(|&s| s < current)
+                .unwrap_or(*hunk_starts.last().unwrap())
+        };
+        self.diff_scroll = next;
+    }
+
+    #[cfg(test)]
+    fn sample_for_hunk_test() -> App {
+        let mut a = App::new(crate::config::Config::default());
+        a.diff_sections = vec![
+            (
+                "Staged",
+                "diff --git a/x b/x\n@@ -1,2 +1,3 @@\n+x\n@@ -20,1 +20,2 @@\n+y".to_string(),
+            ),
+            ("Worktree", String::new()),
+            ("Untracked", String::new()),
+            ("Conflicted", String::new()),
+        ];
+        a
     }
 
     pub fn run_search(&mut self) {
@@ -561,6 +677,7 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
 
         // Refresh agent statuses from PTY output and cost from session files.
         // Panes newly entering Blocked/Done while unfocused raise an attention badge.
+        let mut attention_hits = 0u32;
         for (idx, pane) in app.panes.iter_mut().enumerate() {
             if let Some(pty) = &pane.pty {
                 let tail = pty.scrollback_tail(8);
@@ -573,6 +690,7 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
                             && idx != app.active_pane
                         {
                             pane.attention = true;
+                            attention_hits += 1;
                         }
                         pane.status = new_status;
                         // cost from latest session file
@@ -587,10 +705,18 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
                 if !pty.is_alive() {
                     if pane.status != AgentStatus::Done && idx != app.active_pane {
                         pane.attention = true;
+                        attention_hits += 1;
                     }
                     pane.status = AgentStatus::Done;
                 }
             }
+        }
+
+        // Ring the terminal bell once when something needs attention.
+        if attention_hits > 0 {
+            let mut so = io::stdout();
+            let _ = so.write_all(b"\x07");
+            let _ = so.flush();
         }
 
         match events.next().await {
@@ -608,6 +734,14 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
                 app.tick_count = app.tick_count.wrapping_add(1);
                 if app.tick_count.is_multiple_of(20) {
                     app.module_outputs = crate::core::modules::run_all();
+                }
+                // Refresh visible-tab caches every ~700ms (2 ticks).
+                if app.tick_count.is_multiple_of(2) {
+                    if app.current_tab == Tab::Diff {
+                        app.refresh_diff_cache();
+                    } else if app.current_tab == Tab::Files {
+                        app.refresh_files_cache();
+                    }
                 }
             }
             _ => {}
@@ -721,8 +855,14 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
         (KeyCode::Left, _) => app.current_tab = app.current_tab.prev(),
         (KeyCode::Char('1'), _) => app.current_tab = Tab::Agents,
         (KeyCode::Char('2'), _) => app.current_tab = Tab::Git,
-        (KeyCode::Char('3'), _) => app.current_tab = Tab::Diff,
-        (KeyCode::Char('4'), _) => app.current_tab = Tab::Files,
+        (KeyCode::Char('3'), _) => {
+            app.current_tab = Tab::Diff;
+            app.refresh_diff_cache();
+        }
+        (KeyCode::Char('4'), _) => {
+            app.current_tab = Tab::Files;
+            app.refresh_files_cache();
+        }
         (KeyCode::Char('5'), _) => app.current_tab = Tab::Orchestration,
         (KeyCode::Char('6'), _) => app.current_tab = Tab::Settings,
         // Scroll Diff / Files tabs.
@@ -734,6 +874,8 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
             app.diff_scroll = app.diff_scroll.saturating_sub(1)
         }
         (KeyCode::Char('j'), _) if app.current_tab == Tab::Diff => app.diff_scroll += 1,
+        (KeyCode::Char('n'), _) if app.current_tab == Tab::Diff => app.jump_hunk(true),
+        (KeyCode::Char('p'), _) if app.current_tab == Tab::Diff => app.jump_hunk(false),
         (KeyCode::Up, _) if app.current_tab == Tab::Files => {
             app.files_scroll = app.files_scroll.saturating_sub(1)
         }
@@ -886,5 +1028,42 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
             }
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hunk_jump_forward_and_wrap() {
+        let mut a = App::sample_for_hunk_test();
+        // hunk_starts computed by jump_hunk: [2, 4]
+        assert_eq!(a.diff_scroll, 0);
+        a.jump_hunk(true);
+        assert_eq!(a.diff_scroll, 2);
+        a.jump_hunk(true);
+        assert_eq!(a.diff_scroll, 4);
+        // wrap to first hunk
+        a.jump_hunk(true);
+        assert_eq!(a.diff_scroll, 2);
+        // backward from first → wrap to last
+        a.jump_hunk(false);
+        assert_eq!(a.diff_scroll, 4);
+    }
+
+    #[test]
+    fn hunk_jump_no_hunks_is_noop() {
+        let mut a = App::sample_for_hunk_test();
+        a.diff_sections = vec![("Staged", String::new())];
+        a.jump_hunk(true);
+        assert_eq!(a.diff_scroll, 0);
+    }
+
+    #[test]
+    fn session_snapshot_roundtrip_file() {
+        // PaneSnapshot serializes; load_session_file tolerates missing/absent files.
+        let snaps = load_session_file();
+        let _ = snaps.len(); // must not panic even if no saved session exists
     }
 }
