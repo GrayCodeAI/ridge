@@ -303,6 +303,65 @@ impl App {
         lines
     }
 
+    /// Machine-readable dashboard state for `term --dashboard`.
+    pub fn dashboard_json(&self) -> String {
+        use serde_json::json;
+        let panes: Vec<_> = self
+            .panes
+            .iter()
+            .map(|p| {
+                json!({
+                    "id": p.id,
+                    "title": p.title,
+                    "agent": p.agent_id,
+                    "status": p.status.label(),
+                    "cost_usd": p.cost_usd,
+                    "attention": p.attention,
+                    "session_id": p.session_id,
+                })
+            })
+            .collect();
+        let race = self.race.as_ref().map(|r| {
+            json!({
+                "prompt": r.prompt,
+                "gate_cmd": r.gate_cmd,
+                "contestants": r.contestants.iter().map(|c| json!({
+                    "agent": c.agent_id,
+                    "status": c.status.map(|s| s.label()),
+                    "gate_ok": c.gate_ok,
+                    "winner": c.winner,
+                })).collect::<Vec<_>>(),
+                "winner": r.contestants.iter().find(|c| c.winner)
+                    .map(|c| c.agent_id.clone()),
+            })
+        });
+        let queue: Vec<_> = self
+            .queue
+            .items
+            .iter()
+            .map(|q| json!({"id": q.id, "pane_id": q.pane_id, "msg": q.msg}))
+            .collect();
+        let board = &self.task_board;
+        let board_summary = json!({
+            "pending": board.tasks.iter().filter(|t| t.status.label() == "pending").count(),
+            "running": board.tasks.iter().filter(|t| t.status.label() == "running").count(),
+            "blocked": board.tasks.iter().filter(|t| t.status.label() == "blocked").count(),
+            "done": board.tasks.iter().filter(|t| t.status.label() == "done").count(),
+            "ready": board.ready_tasks(),
+        });
+        let out = json!({
+            "cwd": self.cwd,
+            "panes": panes,
+            "race": race,
+            "queue": queue,
+            "inbox": {"unread": self.inbox.unread_count(), "total": self.inbox.items.len()},
+            "tasks": board_summary,
+            "modules": self.module_outputs.len(),
+            "race_history": self.race_history.records.len(),
+        });
+        serde_json::to_string_pretty(&out).unwrap_or_else(|_| "{}".to_string())
+    }
+
     /// Compact summary of live state, exposed to modules via $TERM_JSON.
     pub fn module_state_json(&self) -> String {
         let panes = self.panes.len();
@@ -1511,6 +1570,16 @@ impl App {
 }
 
 pub async fn run(config: Config, cli: Cli) -> Result<()> {
+    if cli.dashboard {
+        tracing::info!("dashboard JSON mode (cwd {:?})", cli.cwd);
+        let mut app = App::new(config);
+        if let Some(c) = cli.cwd.clone() {
+            app.cwd = c;
+        }
+        println!("{}", app.dashboard_json());
+        return Ok(());
+    }
+
     if cli.headless {
         // No TUI: print machine-readable facts about this machine's agents.
         // Note: tracing writes to a file, stdout stays clean for scripting.
@@ -2536,5 +2605,56 @@ mod dashboard_tests {
             winner: false,
             promoted: false,
         }
+    }
+}
+
+#[cfg(test)]
+mod dashboard_json_tests {
+    use super::*;
+    use crate::config::Config;
+    use serde_json::Value;
+
+    #[test]
+    fn dashboard_json_round_trips() {
+        let mut a = App::new(Config::default());
+        let mut p = Pane::new(1, "Claude #1".to_string());
+        p.status = AgentStatus::Blocked;
+        p.cost_usd = 0.50;
+        a.panes = vec![p];
+        a.race = Some(crate::core::race::Race {
+            prompt: "go".to_string(),
+            contestants: vec![crate::core::race::RaceContestant {
+                agent_id: "claude".to_string(),
+                pane_id: 1,
+                branch: "race-1".to_string(),
+                worktree: std::path::PathBuf::from("/tmp/x"),
+                status: Some(AgentStatus::Working),
+                gate_ok: Some(true),
+                winner: false,
+                promoted: false,
+            }],
+            gate_cmd: None,
+        });
+        a.inbox.send(1, "Claude #1", "m");
+        a.inbox.items[0].arrived = true;
+
+        let v: Value = serde_json::from_str(&a.dashboard_json()).unwrap();
+        assert_eq!(v["panes"][0]["status"], "BLOCKED");
+        assert_eq!(v["panes"][0]["cost_usd"], 0.50);
+        assert_eq!(v["race"]["prompt"], "go");
+        assert_eq!(v["race"]["contestants"][0]["gate_ok"], true);
+        assert_eq!(v["race"]["winner"], Value::Null); // no winner yet
+        assert_eq!(v["inbox"]["unread"], 1);
+        assert!(v["tasks"]["pending"].as_u64().is_some());
+        assert_eq!(v["race_history"], 0);
+    }
+
+    #[test]
+    fn dashboard_json_empty_state_is_valid() {
+        let a = App::new(Config::default());
+        let v: Value = serde_json::from_str(&a.dashboard_json()).unwrap();
+        assert_eq!(v["panes"].as_array().unwrap().len(), 0);
+        assert_eq!(v["race"], Value::Null);
+        assert_eq!(v["queue"].as_array().unwrap().len(), 0);
     }
 }
