@@ -110,6 +110,8 @@ pub struct App {
     pub show_help: bool,
     pub zoomed: bool,
     pub side_by_side: bool,
+    /// When set, the Agents tab stacks this pane index in the lower half.
+    pub split_bottom: Option<usize>,
 
     pub diff_scroll: usize,
     pub files_scroll: usize,
@@ -146,6 +148,7 @@ impl App {
             show_help: false,
             zoomed: false,
             side_by_side: false,
+            split_bottom: None,
 
             module_outputs: Vec::new(),
             diff_scroll: 0,
@@ -243,6 +246,7 @@ impl App {
         if self.active_pane >= self.panes.len() && !self.panes.is_empty() {
             self.active_pane = self.panes.len() - 1;
         }
+        self.split_bottom = None;
         self.status_message = "pane closed".to_string();
     }
 
@@ -1114,6 +1118,28 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
             app.spawn_agent("claude", cwd, None);
         }
         (KeyCode::Char('x'), _) => app.close_active_pane(),
+        (KeyCode::Char('S'), _) => {
+            // zellij-style split: open (or cycle) the bottom preview pane
+            if app.panes.len() < 2 {
+                app.status_message = "split needs 2+ panes".to_string();
+            } else {
+                app.split_bottom = Some(match app.split_bottom {
+                    None => (app.active_pane + 1) % app.panes.len(),
+                    Some(b) => {
+                        let n = (b + 1) % app.panes.len();
+                        if n == b { b } else { n }
+                    }
+                });
+                app.status_message = format!(
+                    "split bottom: pane {} (w closes)",
+                    app.panes[app.split_bottom.unwrap()].id
+                );
+            }
+        }
+        (KeyCode::Char('w'), _) => {
+            app.split_bottom = None;
+            app.status_message = "split closed".to_string();
+        }
         (KeyCode::Char('z'), _) => {
             app.zoomed = !app.zoomed;
             app.status_message = if app.zoomed {

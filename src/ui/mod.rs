@@ -159,7 +159,7 @@ fn render_body(f: &mut Frame, app: &App, area: Rect) {
 fn render_agents(f: &mut Frame, app: &App, area: Rect) {
     // Zoomed ('z'): active terminal takes the full width (sidebar hidden).
     if app.zoomed {
-        render_terminal(f, app, area);
+        render_terminal_for(f, app, area, app.active_pane);
         return;
     }
 
@@ -221,22 +221,38 @@ fn render_agents(f: &mut Frame, app: &App, area: Rect) {
         f.render_widget(list, inner);
     }
 
-    // Main terminal area
-    render_terminal(f, app, chunks[1]);
+    // Main terminal area (plus optional zellij-style bottom split)
+    let split_valid = app
+        .split_bottom
+        .is_some_and(|b| b != app.active_pane && b < app.panes.len());
+    if split_valid {
+        let cols = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+            .split(chunks[1]);
+        render_terminal_for(f, app, cols[0], app.active_pane);
+        render_terminal_for(f, app, cols[1], app.split_bottom.unwrap());
+    } else {
+        render_terminal(f, app, chunks[1]);
+    }
 }
 
 fn render_terminal(f: &mut Frame, app: &App, area: Rect) {
+    render_terminal_for(f, app, area, app.active_pane);
+}
+
+fn render_terminal_for(f: &mut Frame, app: &App, area: Rect, pane_idx: usize) {
     let main_block = Block::default()
         .borders(Borders::ALL)
         .title(if app.panes.is_empty() {
             " Terminal ".to_string()
         } else {
-            format!(" Terminal — pane {} ", app.panes[app.active_pane].id)
+            format!(" Terminal — pane {} ", app.panes[pane_idx].id)
         });
     let main_inner = main_block.inner(area);
     f.render_widget(main_block, area);
 
-    if let Some(pane) = app.panes.get(app.active_pane) {
+    if let Some(pane) = app.panes.get(pane_idx) {
         if let Some(pty) = &pane.pty {
             let text = pty.screen_text();
             let para = Paragraph::new(text).style(Style::default().fg(Color::White));

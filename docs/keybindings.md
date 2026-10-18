@@ -18,4 +18,6 @@
 - Up / Down — scroll Diff and Files tabs; Up/Down in search selects results
 - `z` — zoom pane (full-width, sidebar hidden)
 - `{` / `}` — move pane up / down in the sidebar
+- `S` — zellij-style split (cycle bottom preview pane)
+- `w` — close the split
 - `?` — help overlay (Esc closes)
