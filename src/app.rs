@@ -23,16 +23,18 @@ pub enum Tab {
     Files,
     Orchestration,
     Settings,
+    Dashboard,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 6] = [
+    pub const ALL: [Tab; 7] = [
         Tab::Agents,
         Tab::Git,
         Tab::Diff,
         Tab::Files,
         Tab::Orchestration,
         Tab::Settings,
+        Tab::Dashboard,
     ];
 
     pub fn title(&self) -> &'static str {
@@ -43,6 +45,7 @@ impl Tab {
             Tab::Files => "Files",
             Tab::Orchestration => "Orch",
             Tab::Settings => "Settings",
+            Tab::Dashboard => "Dash",
         }
     }
 
@@ -188,6 +191,116 @@ impl App {
         };
         app.module_outputs = crate::core::modules::run_all(&app.module_state_json());
         app
+    }
+
+    /// Single-glance mission-control summary for the Dashboard tab.
+    pub fn dashboard_lines(&self) -> Vec<String> {
+        use crate::core::orchestration::TaskStatus;
+
+        // Panes
+        let blocked: Vec<&Pane> = self
+            .panes
+            .iter()
+            .filter(|p| p.status == AgentStatus::Blocked)
+            .collect();
+        let errored = self
+            .panes
+            .iter()
+            .filter(|p| p.status == AgentStatus::Error)
+            .count();
+        let working = self
+            .panes
+            .iter()
+            .filter(|p| p.status == AgentStatus::Working)
+            .count();
+        let idle = self
+            .panes
+            .iter()
+            .filter(|p| p.status == AgentStatus::Idle)
+            .count();
+        let cost: f64 = self.panes.iter().map(|p| p.cost_usd).sum();
+        let mut lines = vec![format!(
+            "Panes ({}) — blocked {}, working {}, idle {}, error {}, ${:.2} this session",
+            self.panes.len(),
+            blocked.len(),
+            working,
+            idle,
+            errored,
+            cost
+        )];
+        if blocked.is_empty() {
+            lines.push("  next blocked: none (a jumps when one appears)".to_string());
+        } else {
+            for p in &blocked {
+                let flag = if p.attention { " ⚠" } else { "" };
+                lines.push(format!(
+                    "  blocked: pane {} {}{} (a jumps)",
+                    p.id, p.title, flag
+                ));
+            }
+        }
+
+        // Race
+        let race_line = match &self.race {
+            None => "Race: none — :race <prompt>".to_string(),
+            Some(r) => {
+                if let Some(w) = r.contestants.iter().find(|c| c.winner) {
+                    format!("Race: \"{}\" — WON by {}", r.prompt, w.agent_id)
+                } else {
+                    format!(
+                        "Race: \"{}\" — {} racing (gates run: {})",
+                        r.prompt,
+                        r.contestants.len(),
+                        r.contestants.iter().filter(|c| c.gate_ok.is_some()).count()
+                    )
+                }
+            }
+        };
+        lines.push(race_line);
+
+        // Queue
+        let queue_line = if self.queue.items.is_empty() {
+            "Queue: empty — :queue <pane> <msg>".to_string()
+        } else {
+            let first = self.queue.items.first().expect("checked len");
+            format!(
+                "Queue: {} parked; next → pane {} \"{}\"",
+                self.queue.items.len(),
+                first.pane_id,
+                first.msg
+            )
+        };
+        lines.push(queue_line);
+
+        // Inbox
+        lines.push(format!(
+            "Inbox: {} unread / {} total — o opens",
+            self.inbox.unread_count(),
+            self.inbox.items.len()
+        ));
+
+        // Tasks
+        let st = |want: TaskStatus| {
+            self.task_board
+                .tasks
+                .iter()
+                .filter(|t| t.status == want)
+                .count()
+        };
+        let ready = self.task_board.ready_tasks();
+        lines.push(format!(
+            "Tasks: pending {}, running {}, blocked {}, done {}, failed {} — ready to start: {:?}",
+            st(TaskStatus::Pending),
+            st(TaskStatus::Running),
+            st(TaskStatus::Blocked),
+            st(TaskStatus::Done),
+            st(TaskStatus::Failed),
+            ready
+        ));
+
+        // Modules
+        lines.push(format!("Modules: {} outputs", self.module_outputs.len()));
+        lines
     }
 
     /// Compact summary of live state, exposed to modules via $TERM_JSON.
@@ -1662,6 +1775,7 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
         }
         (KeyCode::Char('5'), _) => app.current_tab = Tab::Orchestration,
         (KeyCode::Char('6'), _) => app.current_tab = Tab::Settings,
+        (KeyCode::Char('7'), _) => app.current_tab = Tab::Dashboard,
         // Scroll Diff / Files tabs.
         (KeyCode::Up, _) if app.current_tab == Tab::Diff => {
             app.diff_scroll = app.diff_scroll.saturating_sub(1)
@@ -2298,5 +2412,129 @@ mod check_command_tests {
         let t = &a.task_board.tasks[0];
         assert!(t.checklist.as_ref().unwrap()[0].done);
         let _ = std::fs::remove_dir_all(&repo);
+    }
+}
+
+#[cfg(test)]
+mod dashboard_tests {
+    use super::*;
+    use crate::config::Config;
+    use crate::core::orchestration::{CheckItem, Task, TaskStatus};
+
+    #[test]
+    fn dashboard_reflects_all_subsystems() {
+        let mut a = App::new(Config::default());
+
+        // Panes: one blocked with attention, one working; costs sum in.
+        let mut p1 = Pane::new(1, "Claude #1".to_string());
+        p1.status = AgentStatus::Blocked;
+        p1.attention = true;
+        p1.cost_usd = 0.31;
+        let mut p2 = Pane::new(2, "Codex #2".to_string());
+        p2.status = AgentStatus::Working;
+        p2.cost_usd = 0.11;
+        a.panes = vec![p1, p2];
+        let _ = a.panes.len();
+
+        // Race without winner.
+        a.race = Some(crate::core::race::Race {
+            prompt: "fix bug".to_string(),
+            contestants: vec![lite_contestant(1)],
+            gate_cmd: None,
+        });
+
+        // Queue + inbox.
+        a.queue.items.push(crate::core::queue::QueuedPrompt {
+            id: 1,
+            pane_id: 2,
+            pane_title: "Codex #2".to_string(),
+            msg: "approve".to_string(),
+        });
+        a.inbox.send(1, "Claude #1", "userinfo");
+        a.inbox.items[0].arrived = true;
+
+        // Tasks: build one of each interesting status.
+        a.task_board.tasks = vec![
+            Task {
+                id: 1,
+                title: "t1".to_string(),
+                deps: vec![],
+                status: TaskStatus::Pending,
+                worktree: None,
+                branch: None,
+                quality_gate: None,
+                pane_id: None,
+                leased_paths: vec![],
+                notes: None,
+                checklist: Some(vec![CheckItem {
+                    label: "x".to_string(),
+                    done: false,
+                }]),
+            },
+            Task {
+                id: 2,
+                title: "t2".to_string(),
+                deps: vec![1],
+                status: TaskStatus::Running,
+                worktree: None,
+                branch: None,
+                quality_gate: None,
+                pane_id: None,
+                leased_paths: vec![],
+                notes: None,
+                checklist: None,
+            },
+        ];
+
+        let mut lines = a.dashboard_lines().join("\n");
+
+        assert!(
+            lines.contains("Panes (2) — blocked 1, working 1"),
+            "{lines}"
+        );
+        assert!(lines.contains("blocked: pane 1 Claude #1 ⚠"), "{lines}");
+        assert!(lines.contains("$0.42 this session"), "{lines}");
+        assert!(lines.contains("Race: \"fix bug\" — 1 racing"), "{lines}");
+        assert!(
+            lines.contains("Queue: 1 parked; next → pane 2 \"approve\""),
+            "{lines}"
+        );
+        assert!(lines.contains("Inbox: 1 unread / 1 total"), "{lines}");
+        assert!(lines.contains("pending 1, running 1"), "{lines}");
+        assert!(lines.contains("ready to start: [1]"), "{lines}");
+        assert!(lines.contains("Modules:"), "{lines}");
+
+        // Winner state flips the race line.
+        a.race.as_mut().unwrap().contestants[0].winner = true;
+        lines = a.dashboard_lines().join("\n");
+        assert!(lines.contains("WON by agent1"), "{lines}");
+
+        // Empty everything degrades gracefully.
+        a.race = None;
+        a.panes.clear();
+        a.queue.clear();
+        a.inbox.clear();
+        a.task_board.tasks.clear();
+        lines = a.dashboard_lines().join("\n");
+        assert!(
+            lines.contains("next blocked: none (a jumps when one appears)"),
+            "{lines}"
+        );
+        assert!(lines.contains("Race: none — :race <prompt>"), "{lines}");
+        assert!(lines.contains("Queue: empty"), "{lines}");
+    }
+
+    /// Builds a minimal race contestant for the dashboard test.
+    fn lite_contestant(x: usize) -> crate::core::race::RaceContestant {
+        crate::core::race::RaceContestant {
+            agent_id: format!("agent{x}"),
+            pane_id: 1,
+            branch: format!("race-{x}"),
+            worktree: std::path::PathBuf::from("/tmp/x"),
+            status: Some(AgentStatus::Working),
+            gate_ok: None,
+            winner: false,
+            promoted: false,
+        }
     }
 }

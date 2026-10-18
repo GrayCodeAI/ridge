@@ -213,6 +213,7 @@ fn render_body(f: &mut Frame, app: &App, area: Rect) {
         Tab::Files => render_files(f, app, area),
         Tab::Orchestration => render_orchestration(f, app, area),
         Tab::Settings => render_settings(f, app, area),
+        Tab::Dashboard => render_dashboard(f, app, area),
     }
 }
 
@@ -625,6 +626,18 @@ fn render_orchestration(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(para, inner);
 }
 
+/// Single-glance mission-control panel: panes, race, queue, inbox, tasks.
+fn render_dashboard(f: &mut Frame, app: &App, area: Rect) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Dashboard (7) — o inbox · a next blocked · :race · :queue ");
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+    let text = app.dashboard_lines().join("\n");
+    let para = Paragraph::new(text).style(Style::default().fg(Color::White));
+    f.render_widget(para, inner);
+}
+
 fn render_settings(f: &mut Frame, app: &App, area: Rect) {
     let block = Block::default().borders(Borders::ALL).title(" Settings ");
     let inner = block.inner(area);
@@ -709,7 +722,7 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 
 const HELP_TEXT: &str = "Keybindings\n\
   q / Ctrl+C  quit        Tab / ← →   switch tab\n\
-  1-6  jump to tab        n  spawn Claude     x  close pane\n\
+  1-7  jump to tab        n  spawn Claude     x  close pane\n\
   r  resume session       f  fork session     a  next blocked\n\
   [ ]  switch pane        o  reply inbox      j  k  scroll\n\
   n / p  next/prev hunk (Diff)\n\

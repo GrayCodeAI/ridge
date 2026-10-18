@@ -2,7 +2,7 @@
 
 - `q` / `Ctrl+C` — quit
 - `Tab` / `←` `→` — switch tabs
-- `1`–`6` — jump to tab
+- `1`–`7` — jump to tab (7 = dashboard)
 - `n` — spawn Claude Code pane
 - `x` — close active pane
 - `r` — resume last session
