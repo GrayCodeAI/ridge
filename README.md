@@ -1,10 +1,20 @@
 # Term
 
-Mission control for your AI agents. Terminal-native TUI. Part of [Gryacodeai](https://gryacodeai.com).
+Mission control for your AI agents. Terminal-native TUI. Part of [GrayCodeAI](https://github.com/GrayCodeAI).
+
+[![CI](https://github.com/GrayCodeAI/term/actions/workflows/ci.yml/badge.svg)](https://github.com/GrayCodeAI/term/actions/workflows/ci.yml)
+[![Release](https://github.com/GrayCodeAI/term/actions/workflows/release.yml/badge.svg)](https://github.com/GrayCodeAI/term/actions/workflows/release.yml)
+[![Security Audit](https://github.com/GrayCodeAI/term/actions/workflows/audit.yml/badge.svg)](https://github.com/GrayCodeAI/term/actions/workflows/audit.yml)
+[![Crates.io](https://img.shields.io/crates/v/term.svg)](https://crates.io/crates/term)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ## Status
 
-Phase 0 — skeleton. PTY/agent detection, git/diff/files/orchestration coming in subsequent phases. See `term-plan.md`.
+Full mission control: 11 agent adapters (Claude, Codex, OpenCode, Gemini, Copilot, Aider, Kimi, Pi, Grok, Cursor, Generic), PTY terminal emulation, task orchestration with worktrees/leases/quality-gates/merge, session persistence, cost tracking, modules, themes, and mobile-width mode. 23 tests, CI on 3 OS. See `CHANGELOG.md`.
+
+## Docs
+
+/md book site under `docs/` (mdBook) — built in CI; open `docs/book/index.html` or run `mdbook build docs` locally.
 
 ## Build
 

@@ -1,3 +1,4 @@
 /target
 *.log
 .term/
+docs/book/

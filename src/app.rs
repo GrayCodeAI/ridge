@@ -774,6 +774,19 @@ impl App {
     }
 }
 
+/// Parse an inline delegation buffer typed at a pane prompt.
+/// Format: `=<pane_index> <message...>`. Returns the target index and message.
+pub fn parse_inline_delegate(buf: &str) -> Option<(usize, String)> {
+    let t = buf.trim();
+    if !t.starts_with('=') {
+        return None;
+    }
+    let mut it = t[1..].trim_start().splitn(2, char::is_whitespace);
+    let idx = it.next()?.parse::<usize>().ok()?;
+    let msg = it.next().unwrap_or("").trim().to_string();
+    Some((idx, msg))
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PaneSnapshot {
     pub agent_id: String,
@@ -1286,27 +1299,12 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
         }
         (KeyCode::Enter, _) => {
             // Inline delegation: if input started with '=', route to target pane.
-            let mut delegated = false;
-            let mut target_idx = None;
-            let mut msg = String::new();
-            if let Some(pane) = app.active_pane() {
-                if pane.input_buffer.trim_start().starts_with('=') {
-                    let buf = pane.input_buffer.trim().to_string();
-                    let mut parts = buf[1..].splitn(2, char::is_whitespace);
-                    if let Some(tok) = parts.next() {
-                        if let Ok(idx) = tok.parse::<usize>() {
-                            target_idx = Some(idx);
-                            msg = parts.next().unwrap_or("").trim().to_string();
-                            delegated = true;
-                        }
-                    }
-                }
-            }
-            if delegated {
-                if let Some(idx) = target_idx {
-                    app.delegate_to_pane(idx, &msg);
-                    app.status_message = format!("delegated to pane {}", idx);
-                }
+            let delegated = app
+                .active_pane()
+                .and_then(|p| parse_inline_delegate(&p.input_buffer));
+            if let Some((idx, msg)) = delegated {
+                app.delegate_to_pane(idx, &msg);
+                app.status_message = format!("delegated to pane {}", idx);
             } else if let Some(pane) = app.active_pane_mut() {
                 if let Some(pty) = &pane.pty {
                     let _ = pty.write(b"\r");
@@ -1363,5 +1361,31 @@ mod tests {
         // PaneSnapshot serializes; load_session_file tolerates missing/absent files.
         let snaps = load_session_file();
         let _ = snaps.len(); // must not panic even if no saved session exists
+    }
+}
+
+#[cfg(test)]
+mod inline_delegation_tests {
+    use super::*;
+
+    #[test]
+    fn parses_valid_delegation() {
+        assert_eq!(
+            parse_inline_delegate("=0 fix the flaky test"),
+            Some((0, "fix the flaky test".to_string()))
+        );
+        assert_eq!(parse_inline_delegate("=2"), Some((2, String::new())));
+        assert_eq!(
+            parse_inline_delegate("  =12  spaced msg  "),
+            Some((12, "spaced msg".to_string()))
+        );
+    }
+
+    #[test]
+    fn rejects_non_delegation_buffers() {
+        assert_eq!(parse_inline_delegate("fix the test"), None);
+        assert_eq!(parse_inline_delegate(""), None);
+        assert_eq!(parse_inline_delegate("=notanum hi"), None);
+        assert_eq!(parse_inline_delegate("== hi"), None);
     }
 }
