@@ -10,7 +10,7 @@ pub fn run_git(cwd: &Path, args: &[&str]) -> String {
             }
             s
         }
-        Err(e) => format!("git error: {}", e),
+        Err(e) => format!("git error: {e}"),
     }
 }
 

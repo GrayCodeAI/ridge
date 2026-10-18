@@ -133,7 +133,7 @@ impl App {
         let agent = match self.registry.find_by_id(agent_id) {
             Some(a) => a,
             None => {
-                self.status_message = format!("unknown agent: {}", agent_id);
+                self.status_message = format!("unknown agent: {agent_id}");
                 return;
             }
         };
@@ -151,7 +151,7 @@ impl App {
                 self.status_message = format!("spawned {} (pane {})", agent.name(), id);
             }
             Err(e) => {
-                self.status_message = format!("spawn failed: {}", e);
+                self.status_message = format!("spawn failed: {e}");
             }
         }
     }
@@ -202,7 +202,7 @@ impl App {
                             if let Some(pty) = &pane.pty {
                                 let _ = pty.write(msg.as_bytes());
                                 let _ = pty.write(b"\r");
-                                self.status_message = format!("delegated to pane {}", idx);
+                                self.status_message = format!("delegated to pane {idx}");
                             }
                         }
                     }
@@ -212,7 +212,7 @@ impl App {
                 if parts.len() >= 3 && parts[1] == "add" {
                     let title = parts[2..].join(" ");
                     let id = self.task_board.add(title, vec![], None);
-                    self.status_message = format!("task {} added", id);
+                    self.status_message = format!("task {id} added");
                 } else if parts.len() >= 3 && parts[1] == "start" {
                     if let Ok(id) = parts[2].parse::<u64>() {
                         match self.task_board.start_task(id, &self.cwd) {
@@ -220,15 +220,15 @@ impl App {
                                 // spawn an agent in that worktree
                                 let agent = parts.get(3).copied().unwrap_or("claude");
                                 self.spawn_agent(agent, path);
-                                self.status_message = format!("task {} started", id);
+                                self.status_message = format!("task {id} started");
                             }
-                            Err(e) => self.status_message = format!("start failed: {}", e),
+                            Err(e) => self.status_message = format!("start failed: {e}"),
                         }
                     }
                 } else if parts.len() >= 3 && parts[1] == "done" {
                     if let Ok(id) = parts[2].parse::<u64>() {
                         self.task_board.complete_task(id, true);
-                        self.status_message = format!("task {} done", id);
+                        self.status_message = format!("task {id} done");
                     }
                 }
             }
@@ -240,7 +240,7 @@ impl App {
                     "commands: spawn <agent>, close, delegate <pane> <msg>, task add/start/done, branch".to_string();
             }
             other => {
-                self.status_message = format!("unknown command: {}", other);
+                self.status_message = format!("unknown command: {other}");
             }
         }
     }
@@ -256,7 +256,7 @@ impl App {
         let files = crate::core::git::run_git(&self.cwd, &["ls-files"]);
         for line in files.lines() {
             if line.to_lowercase().contains(&q) {
-                results.push(format!("file: {}", line));
+                results.push(format!("file: {line}"));
             }
         }
         // Agents/panes
@@ -274,7 +274,7 @@ impl App {
         // Commands (static list)
         for c in ["spawn", "close", "delegate", "task", "branch", "help"] {
             if c.contains(&q) {
-                results.push(format!("cmd: {}", c));
+                results.push(format!("cmd: {c}"));
             }
         }
         results.truncate(50);
@@ -348,7 +348,6 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
                     app.module_outputs = crate::core::modules::run_all();
                 }
             }
-            Some(Event::Quit) => app.should_quit = true,
             _ => {}
         }
 
@@ -407,7 +406,7 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
                 let msg = parts.next().unwrap_or("").trim();
                 if let Ok(idx) = pane_tok.parse::<usize>() {
                     app.delegate_to_pane(idx, msg);
-                    app.status_message = format!("delegated to pane {}", idx);
+                    app.status_message = format!("delegated to pane {idx}");
                 } else {
                     // try pane title match
                     app.status_message = "usage: =<pane_index> <message>".to_string();
@@ -485,7 +484,7 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
                             Ok(pty) => {
                                 let new_id = app.next_pane_id;
                                 app.next_pane_id += 1;
-                                let mut new_pane = Pane::new(new_id, format!("{} (resumed)", id));
+                                let mut new_pane = Pane::new(new_id, format!("{id} (resumed)"));
                                 new_pane.agent_id = Some(id);
                                 new_pane.pty = Some(pty);
                                 new_pane.status = AgentStatus::Working;
@@ -493,7 +492,7 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
                                 app.active_pane = app.panes.len() - 1;
                                 app.status_message = "session resumed".to_string();
                             }
-                            Err(e) => app.status_message = format!("resume failed: {}", e),
+                            Err(e) => app.status_message = format!("resume failed: {e}"),
                         }
                     } else {
                         app.status_message = "resume not supported".to_string();

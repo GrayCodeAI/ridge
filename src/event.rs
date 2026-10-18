@@ -8,7 +8,6 @@ pub enum Event {
     Mouse(MouseEvent),
     Resize(u16, u16),
     Tick,
-    Quit,
 }
 
 pub struct EventHandler {

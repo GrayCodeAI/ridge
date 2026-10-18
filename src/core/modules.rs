@@ -30,7 +30,7 @@ pub fn run_module(path: &PathBuf) -> (String, String) {
             let text = String::from_utf8_lossy(&o.stdout).trim().to_string();
             (name, text)
         }
-        Err(e) => (name, format!("err: {}", e)),
+        Err(e) => (name, format!("err: {e}")),
     }
 }
 
