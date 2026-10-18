@@ -24,6 +24,8 @@ curl -fsSL https://gryacodeai.com/term/install.sh | sh
 
 # Via Homebrew (once tap is published)
 brew install gryacodeai/tap/term
+# or restore last session's panes
+term --restore
 ```
 
 ## CI / Release

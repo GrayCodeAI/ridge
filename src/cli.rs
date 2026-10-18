@@ -10,4 +10,8 @@ pub struct Cli {
     /// Run in headless mode (no TUI) — for scripting/agents.
     #[arg(long)]
     pub headless: bool,
+
+    /// Restore panes from the previously saved session.
+    #[arg(long)]
+    pub restore: bool,
 }

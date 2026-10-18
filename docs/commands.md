@@ -6,6 +6,7 @@ Type `:` to enter command mode.
 - `close` — close active pane
 - `delegate <pane> <msg>` — send message to a pane
 - `broadcast <msg>` — send to all panes
+- `session save` / `session clear` — persist or delete saved panes
 - `export costs` — export cost CSV
 - `account list` / `account add <agent> <name>`
 - `task add <title>` — add task
