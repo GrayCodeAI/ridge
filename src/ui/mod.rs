@@ -322,13 +322,21 @@ fn render_settings(f: &mut Frame, app: &App, area: Rect) {
     if modules.is_empty() {
         modules = "  (none in ~/.config/term/modules)\n".to_string();
     }
+    let mut accounts = String::new();
+    for a in &app.config.accounts {
+        accounts.push_str(&format!("  {} / {}\n", a.agent, a.name));
+    }
+    if accounts.is_empty() {
+        accounts = "  (none)\n".to_string();
+    }
     let text = format!(
-        "Theme: {}\nPrefix: {}\nQuit: {}\n\nConfig: ~/.config/term/term.toml\nData:   ~/.local/share/term\nCWD:    {}\nPanes:  {}\n\nModules:\n{}",
+        "Theme: {}\nPrefix: {}\nQuit: {}\n\nConfig: ~/.config/term/term.toml\nData:   ~/.local/share/term\nCWD:    {}\nPanes:  {}\n\nAccounts:\n{}\nModules:\n{}",
         app.config.theme,
         app.config.keybindings.prefix,
         app.config.keybindings.quit,
         app.cwd.display(),
         app.panes.len(),
+        accounts,
         modules
     );
     let para = Paragraph::new(text).style(Style::default().fg(Color::White));

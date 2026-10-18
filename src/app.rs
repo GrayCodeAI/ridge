@@ -241,6 +241,28 @@ impl App {
                         self.task_board.complete_task(id, true);
                         self.status_message = format!("task {id} done");
                     }
+                } else if parts.len() >= 2 && parts[1] == "account" {
+                    if parts.len() >= 3 && parts[2] == "list" {
+                        let mut msg = String::from("accounts:\n");
+                        for a in &self.config.accounts {
+                            msg.push_str(&format!("  {} / {}\n", a.agent, a.name));
+                        }
+                        if self.config.accounts.is_empty() {
+                            msg.push_str("  (none)\n");
+                        }
+                        self.status_message = msg;
+                    } else if parts.len() >= 4 && parts[2] == "add" {
+                        self.config.accounts.push(crate::config::Account {
+                            agent: parts[3].to_string(),
+                            name: parts.get(4).copied().unwrap_or("default").to_string(),
+                            env: std::collections::BTreeMap::new(),
+                        });
+                        let _ = self.config.save();
+                        self.status_message = format!("account added: {}", parts[3]);
+                    } else {
+                        self.status_message =
+                            "usage: account list | account add <agent> <name>".to_string();
+                    }
                 } else if parts.len() >= 2 && parts[1] == "broadcast" {
                     let msg = parts[2..].join(" ");
                     for i in 0..self.panes.len() {
@@ -300,7 +322,7 @@ impl App {
             }
             "help" => {
                 self.status_message =
-                    "commands: spawn <agent>, close, delegate <pane> <msg>, broadcast <msg>, task add/start/done/lease/gate/merge/kanban/fanout, branch".to_string();
+                    "commands: spawn <agent>, close, delegate <pane> <msg>, broadcast <msg>, account list/add, task add/start/done/lease/gate/merge/kanban/fanout, branch".to_string();
             }
             other => {
                 self.status_message = format!("unknown command: {other}");
