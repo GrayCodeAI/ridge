@@ -230,6 +230,12 @@ impl App {
                         self.task_board.complete_task(id, true);
                         self.status_message = format!("task {id} done");
                     }
+                } else if parts.len() >= 2 && parts[1] == "broadcast" {
+                    let msg = parts[2..].join(" ");
+                    for i in 0..self.panes.len() {
+                        self.delegate_to_pane(i, &msg);
+                    }
+                    self.status_message = format!("broadcast to {} panes", self.panes.len());
                 } else if parts.len() >= 4 && parts[1] == "lease" {
                     if let Ok(id) = parts[2].parse::<u64>() {
                         let paths: Vec<std::path::PathBuf> =
@@ -247,6 +253,20 @@ impl App {
                             Err(e) => self.status_message = format!("gate error: {e}"),
                         }
                     }
+                } else if parts.len() >= 3 && parts[1] == "kanban" {
+                    self.status_message = self.task_board.render_kanban();
+                } else if parts.len() >= 3 && parts[1] == "fanout" {
+                    let title = parts[2..].join(" ");
+                    let agents = ["claude", "codex", "opencode"];
+                    for a in agents {
+                        let id = self
+                            .task_board
+                            .add(format!("{} [{}]", title, a), vec![], None);
+                        if let Ok(path) = self.task_board.start_task(id, &self.cwd) {
+                            self.spawn_agent(a, path);
+                        }
+                    }
+                    self.status_message = format!("fanout: spawned {} agents", agents.len());
                 } else if parts.len() >= 3 && parts[1] == "merge" {
                     if let Ok(id) = parts[2].parse::<u64>() {
                         match self.task_board.merge_task(id, &self.cwd) {
@@ -261,7 +281,7 @@ impl App {
             }
             "help" => {
                 self.status_message =
-                    "commands: spawn <agent>, close, delegate <pane> <msg>, task add/start/done/lease/gate/merge, branch".to_string();
+                    "commands: spawn <agent>, close, delegate <pane> <msg>, broadcast <msg>, task add/start/done/lease/gate/merge/kanban/fanout, branch".to_string();
             }
             other => {
                 self.status_message = format!("unknown command: {other}");

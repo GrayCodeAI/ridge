@@ -295,8 +295,9 @@ fn render_orchestration(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(block, area);
 
     let text = format!(
-        "Task board:\n\n{}\n\nReady: {:?}\n\nCommands:\n  :task add <title>\n  :task start <id> [agent]\n  :task done <id>\n  :task lease <id> <paths...>\n  :task gate <id>\n  :task merge <id>\n  :delegate <pane> <msg>",
+        "Task board:\n\n{}\n\nKanban:\n{}\n\nReady: {:?}\n\nCommands:\n  :task add <title>\n  :task start <id> [agent]\n  :task done <id>\n  :task lease <id> <paths...>\n  :task gate <id>\n  :task merge <id>\n  :task kanban\n  :task fanout <prompt>\n  :delegate <pane> <msg>",
         app.task_board.render(),
+        app.task_board.render_kanban(),
         app.task_board.ready_tasks()
     );
     let para = Paragraph::new(text).style(Style::default().fg(Color::White));
