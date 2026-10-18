@@ -33,6 +33,8 @@ Type `:` to enter command mode.
 - `inbox` — open the reply inbox overlay (captured replies from delegations)
 - `inbox unread` — count unread captured replies
 - `inbox clear` — empty the inbox
+- `queue <pane_idx> <msg>` — park a prompt for that pane; it is delivered automatically (and recorded in the inbox) the next time the pane blocks on the user
+- `queue list` / `queue drop <id>` / `queue clear` — manage parked prompts
 - `branch` — show current branch
 - `help` — list commands
 
