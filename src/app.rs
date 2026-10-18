@@ -263,6 +263,29 @@ impl App {
                         self.status_message =
                             "usage: account list | account add <agent> <name>".to_string();
                     }
+                } else if parts.len() >= 2 && parts[1] == "export" {
+                    if parts.len() >= 3 && parts[2] == "costs" {
+                        let mut csv = String::from("pane,agent,status,cost_usd\n");
+                        for p in &self.panes {
+                            csv.push_str(&format!(
+                                "{},{},{},{}\n",
+                                p.id,
+                                p.agent_id.as_deref().unwrap_or("-"),
+                                p.status.label(),
+                                p.cost_usd
+                            ));
+                        }
+                        let path = self.cwd.join("term-costs.csv");
+                        match std::fs::write(&path, csv) {
+                            Ok(()) => {
+                                self.status_message =
+                                    format!("exported costs to {}", path.display())
+                            }
+                            Err(e) => self.status_message = format!("export failed: {}", e),
+                        }
+                    } else {
+                        self.status_message = "usage: export costs".to_string();
+                    }
                 } else if parts.len() >= 2 && parts[1] == "broadcast" {
                     let msg = parts[2..].join(" ");
                     for i in 0..self.panes.len() {
@@ -322,7 +345,7 @@ impl App {
             }
             "help" => {
                 self.status_message =
-                    "commands: spawn <agent>, close, delegate <pane> <msg>, broadcast <msg>, account list/add, task add/start/done/lease/gate/merge/kanban/fanout, branch".to_string();
+                    "commands: spawn <agent>, close, delegate <pane> <msg>, broadcast <msg>, export costs, account list/add, task add/start/done/lease/gate/merge/kanban/fanout, branch".to_string();
             }
             other => {
                 self.status_message = format!("unknown command: {other}");
