@@ -1,4 +1,5 @@
 use crate::app::{App, Tab};
+use crate::core::agent::AgentStatus;
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
@@ -328,12 +329,22 @@ fn render_settings(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_status(f: &mut Frame, app: &App, area: Rect) {
+    let blocked = app
+        .panes
+        .iter()
+        .filter(|p| p.status == AgentStatus::Blocked)
+        .count();
+    let blocked_str = if blocked > 0 {
+        format!("  ⚠ {} blocked  ", blocked)
+    } else {
+        String::new()
+    };
     let left = Span::styled(
-        format!(" {} ", app.status_message),
+        format!(" {}{} ", app.status_message, blocked_str),
         Style::default().fg(Color::White),
     );
     let right = Span::styled(
-        " q:quit  n:spawn  x:close  r:resume  f:fork  [/]:pane  ::cmd  Tab:tabs  ",
+        " q:quit  n:spawn  a:next-blocked  x:close  r:resume  f:fork  [/]:pane  ::cmd  Tab:tabs  ",
         Style::default().fg(Color::DarkGray),
     );
     let line = Line::from(vec![left, right]);
