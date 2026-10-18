@@ -230,6 +230,30 @@ impl App {
                         self.task_board.complete_task(id, true);
                         self.status_message = format!("task {id} done");
                     }
+                } else if parts.len() >= 4 && parts[1] == "lease" {
+                    if let Ok(id) = parts[2].parse::<u64>() {
+                        let paths: Vec<std::path::PathBuf> =
+                            parts[3..].iter().map(std::path::PathBuf::from).collect();
+                        match self.task_board.lease_paths(id, paths) {
+                            Ok(()) => self.status_message = format!("leased paths for task {id}"),
+                            Err(e) => self.status_message = format!("lease failed: {e}"),
+                        }
+                    }
+                } else if parts.len() >= 3 && parts[1] == "gate" {
+                    if let Ok(id) = parts[2].parse::<u64>() {
+                        match self.task_board.run_quality_gate(id) {
+                            Ok(true) => self.status_message = format!("task {id} gate passed"),
+                            Ok(false) => self.status_message = format!("task {id} gate failed"),
+                            Err(e) => self.status_message = format!("gate error: {e}"),
+                        }
+                    }
+                } else if parts.len() >= 3 && parts[1] == "merge" {
+                    if let Ok(id) = parts[2].parse::<u64>() {
+                        match self.task_board.merge_task(id, &self.cwd) {
+                            Ok(()) => self.status_message = format!("task {id} merged"),
+                            Err(e) => self.status_message = format!("merge failed: {e}"),
+                        }
+                    }
                 }
             }
             "branch" => {
@@ -237,7 +261,7 @@ impl App {
             }
             "help" => {
                 self.status_message =
-                    "commands: spawn <agent>, close, delegate <pane> <msg>, task add/start/done, branch".to_string();
+                    "commands: spawn <agent>, close, delegate <pane> <msg>, task add/start/done/lease/gate/merge, branch".to_string();
             }
             other => {
                 self.status_message = format!("unknown command: {other}");
