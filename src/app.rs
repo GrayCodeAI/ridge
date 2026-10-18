@@ -524,6 +524,21 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
                 }
             }
         }
+        (KeyCode::Char('a'), _) => {
+            // Jump to next blocked pane.
+            if !app.panes.is_empty() {
+                let start = app.active_pane;
+                for offset in 1..=app.panes.len() {
+                    let idx = (start + offset) % app.panes.len();
+                    if app.panes[idx].status == AgentStatus::Blocked {
+                        app.active_pane = idx;
+                        app.status_message =
+                            format!("jumped to blocked pane {}", app.panes[idx].id);
+                        break;
+                    }
+                }
+            }
+        }
         (KeyCode::Char('f'), _) => {
             let info = app
                 .active_pane()
