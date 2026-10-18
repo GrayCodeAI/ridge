@@ -738,6 +738,26 @@ impl App {
                             Err(e) => self.status_message = format!("merge failed: {e}"),
                         }
                     }
+                } else if parts.len() >= 3 && parts[1] == "from-inbox" {
+                    if let Ok(n) = parts[2].parse::<usize>() {
+                        let len = self.inbox.items.len();
+                        if n == 0 || n > len {
+                            self.status_message =
+                                format!("from-inbox: invalid item {n} (have {len})");
+                        } else {
+                            // Overlay numbering is 1-based, newest first.
+                            let item = self.inbox.items[len - n].clone();
+                            let id = self.task_board.add_from_reply(
+                                &item.pane_title,
+                                &item.prompt,
+                                &item.reply,
+                            );
+                            self.inbox.items.remove(len - n);
+                            self.status_message = format!(
+                                "task {id} created from inbox item {n} — reply stored in notes"
+                            );
+                        }
+                    }
                 }
                 // Persist the board after any task mutation (save is cheap; also
                 // covers fanout/add/start/done/lease/gate/merge).
