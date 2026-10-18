@@ -605,7 +605,7 @@ fn render_orchestration(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(block, area);
 
     let text = format!(
-        "Task board:\n\n{}\n\nKanban:\n{}\n\nReady: {:?}\n\nRace:\n{}\nCommands:\n  :task add <title>\n  :task start <id> [agent]\n  :task done <id>\n  :task lease <id> <paths...>\n  :task gate <id>\n  :task merge <id>\n  :task kanban\n  :task fanout <prompt>\n  :race <prompt> — fan a prompt to claude/codex/opencode in worktrees\n  :race gate <idx> · :race winner <idx> [force] · :race cancel\n  :delegate <pane> <msg>",
+        "Task board:\n\n{}\n\nKanban:\n{}\n\nReady: {:?}\n\nRace:\n{}\nCommands:\n  :task add <title>\n  :task start <id> [agent]\n  :task done <id>\n  :task lease <id> <paths...>\n  :task gate <id>\n  :task merge <id>\n  :task kanban\n  :task fanout <prompt>\n  :task from-inbox <n> — promote a captured reply into a task\n  :race <prompt> — fan a prompt to claude/codex/opencode in worktrees\n  :race gate <idx> · :race winner <idx> [force] · :race cancel\n  :delegate <pane> <msg>",
         app.task_board.render(),
         app.task_board.render_kanban(),
         app.task_board.ready_tasks(),
@@ -712,7 +712,7 @@ Commands\n\
   spawn <agent> · close · delegate <pane> <msg> · broadcast <msg>\n\
   race <prompt> · race winner <idx> [force] · race gate <idx> · race cancel\n\
   inbox · inbox unread · inbox clear\n\
-  task add|start|done|lease|gate|merge|kanban|fanout\n\
+  task add|start|done|lease|gate|merge|kanban|fanout|from-inbox\n\
   session save|clear · export costs|session · account list|add|env|show\n\
   config show|theme · branch · help";
 

@@ -34,6 +34,9 @@ pub struct Task {
     pub quality_gate: Option<String>,
     pub pane_id: Option<usize>,
     pub leased_paths: Vec<PathBuf>,
+    /// Free-form notes (e.g. captured inbox reply that promoted this task).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -82,7 +85,24 @@ impl TaskBoard {
             quality_gate: gate,
             pane_id: None,
             leased_paths: Vec::new(),
+            notes: None,
         });
+        id
+    }
+
+    /// Add a task seeded from a captured inbox reply; notes record the reply.
+    pub fn add_from_reply(&mut self, pane_title: &str, prompt: &str, reply: &str) -> u64 {
+        let title = if prompt.chars().count() > 80 {
+            let t: String = prompt.chars().take(77).collect();
+            format!("{t}…")
+        } else {
+            prompt.to_string()
+        };
+        let notes = format!("from: {pane_title}\nprompt: {prompt}\nreply: {reply}");
+        let id = self.add(title, vec![], None);
+        if let Some(t) = self.tasks.last_mut() {
+            t.notes = Some(notes);
+        }
         id
     }
 
@@ -239,14 +259,21 @@ impl TaskBoard {
                 format!(" leases: {:?}", t.leased_paths)
             };
             let gate = t.quality_gate.as_deref().unwrap_or("-");
+            let note = t.notes.as_deref().and_then(|n| {
+                n.lines().find(|l| l.starts_with("reply:")).map(|l| {
+                    let r: String = l.get(6..).unwrap_or("").trim().chars().take(57).collect();
+                    format!(" [reply: {r}]")
+                })
+            });
             out.push_str(&format!(
-                "[{}] #{} {} (deps: {:?}, gate: {}){}\n",
+                "[{}] #{} {} (deps: {:?}, gate: {}){}{}\n",
                 t.status.label(),
                 t.id,
                 t.title,
                 t.deps,
                 gate,
-                leases
+                leases,
+                note.unwrap_or_default()
             ));
         }
         out
@@ -334,5 +361,36 @@ mod filter_tests {
         b.filter = None;
         let r = b.render();
         assert!(r.contains("alpha") && r.contains("beta"));
+    }
+}
+
+#[cfg(test)]
+mod notes_tests {
+    use super::*;
+
+    #[test]
+    fn add_from_reply_captures_notes_and_trims_title() {
+        let mut b = TaskBoard::default();
+        let long_prompt = "x".repeat(120);
+        let id = b.add_from_reply("Claude #7", &long_prompt, "done, tests added");
+        let t = b.tasks.iter().find(|t| t.id == id).unwrap();
+        assert!(t.title.ends_with("…") && t.title.chars().count() == 78);
+        let notes = t.notes.as_deref().unwrap();
+        assert!(notes.starts_with("from: Claude #7"));
+        assert!(notes.contains("reply: done, tests added"));
+    }
+
+    #[test]
+    fn notes_survive_save_load() {
+        let dir = std::env::temp_dir().join("term-notes-roundtrip");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut b = TaskBoard::default();
+        b.add_from_reply("Codex #2", "write tests", "ok");
+        b.save(&dir).unwrap();
+        let b2 = TaskBoard::load(&dir);
+        assert_eq!(b2.tasks.len(), 1);
+        assert!(b2.tasks[0].notes.as_deref().unwrap().contains("reply: ok"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

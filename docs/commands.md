@@ -21,6 +21,7 @@ Type `:` to enter command mode.
 - `task gate <id>` — run quality gate
 - `task merge <id>` — merge branch
 - `task filter <status|text|all>` — filter the board view
+- `task from-inbox <n>` — promote inbox item `n` (1 = newest, as numbered in the `o` overlay) into a task; the captured reply is stored in its notes and shown on the board as ` [reply: …]`
 - `task kanban` — show kanban
 - `task fanout <prompt>` — fan out to multiple agents
 - `task subagent <parent> <agent>` — spawn subagent
