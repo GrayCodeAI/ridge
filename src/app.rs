@@ -344,7 +344,7 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
             }
             Some(Event::Tick) => {
                 app.tick_count = app.tick_count.wrapping_add(1);
-                if app.tick_count % 20 == 0 {
+                if app.tick_count.is_multiple_of(20) {
                     app.module_outputs = crate::core::modules::run_all();
                 }
             }
