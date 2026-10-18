@@ -100,7 +100,16 @@ fn theme_accent(theme: &str) -> Color {
         "light" => Color::Blue,
         "amber" => Color::Yellow,
         "green" => Color::Green,
+        "red" => Color::Red,
+        "magenta" => Color::Magenta,
         _ => Color::Cyan,
+    }
+}
+
+fn theme_bg(theme: &str) -> Color {
+    match theme {
+        "light" => Color::White,
+        _ => Color::Black,
     }
 }
 
