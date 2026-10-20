@@ -40,5 +40,9 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
+    if cli.update {
+        return crate::core::update::run_update(env!("CARGO_PKG_VERSION"));
+    }
+
     app::run(config, cli).await
 }
