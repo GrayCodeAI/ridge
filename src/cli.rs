@@ -38,4 +38,8 @@ pub struct Cli {
     /// Start the UHP 1.0 agent-native socket server (Unix domain socket).
     #[arg(long)]
     pub uhp: bool,
+
+    /// Start the Luvus Web browser client (HTTP + WebSocket).
+    #[arg(long)]
+    pub web: bool,
 }
