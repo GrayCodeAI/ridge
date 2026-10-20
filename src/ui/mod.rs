@@ -468,6 +468,35 @@ fn render_terminal_for(f: &mut Frame, app: &App, area: Rect, pane_idx: usize) {
                 }
                 let para = Paragraph::new(lines).style(Style::default().fg(palette.fg));
                 f.render_widget(para, main_inner);
+            } else if app.copy_mode && app.copy_pane == Some(pane_idx) {
+                // Copy mode: render with cursor and selection highlight.
+                let mut lines: Vec<Line> = Vec::new();
+                let sel = &app.copy_selection;
+                let cursor = (app.copy_cursor_row, app.copy_cursor_col);
+                for (row, line) in screen.lines().enumerate() {
+                    let mut spans: Vec<Span> = Vec::new();
+                    for (col, ch) in line.chars().enumerate() {
+                        let in_sel = sel.as_ref().is_some_and(|((r1, c1), (r2, c2))| {
+                            let (r1, c1, r2, c2) = (*r1, *c1, *r2, *c2);
+                            let (r_start, r_end) = if r1 <= r2 { (r1, r2) } else { (r2, r1) };
+                            let (c_start, c_end) = if c1 <= c2 { (c1, c2) } else { (c2, c1) };
+                            row >= r_start && row <= r_end && col >= c_start && col < c_end
+                        });
+                        let is_cursor = row == cursor.0 && col == cursor.1;
+                        let style = if is_cursor {
+                            Style::default().bg(palette.warning).fg(palette.bg).add_modifier(Modifier::BOLD)
+                        } else if in_sel {
+                            Style::default().bg(palette.accent).fg(palette.bg)
+                        } else {
+                            Style::default()
+                        };
+                        spans.push(Span::styled(ch.to_string(), style));
+                    }
+                    spans.push(Span::raw("\n"));
+                    lines.push(Line::from(spans));
+                }
+                let para = Paragraph::new(lines).style(Style::default().fg(palette.fg));
+                f.render_widget(para, main_inner);
             } else {
                 let para = Paragraph::new(screen).style(Style::default().fg(palette.fg));
                 f.render_widget(para, main_inner);
@@ -888,7 +917,7 @@ const HELP_TEXT: &str = "Keybindings\n\
   [ ]  switch pane        o  reply inbox      j  k  scroll\n\
   n / p  next/prev hunk (Diff)\n\
   :  command mode         =  delegate         >  commander (targeted msg)\n\
-  /  pane search          ?  toggle help      Esc  close prompt/overlay\n\n\
+  /  pane search          v  copy mode         ?  toggle help      Esc  close prompt/overlay\n\n\
 Commands\n\
   spawn <agent> · close · delegate <pane> <msg> · broadcast <msg>\n\
   race <prompt> · race winner <idx> [force] · race gate <idx>

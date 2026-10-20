@@ -164,6 +164,13 @@ pub struct App {
     pub pane_search_matches: Vec<(usize, usize)>, // (row, col) positions in screen
     pub pane_search_selected: usize,
     pub pane_search_pane: Option<usize>,
+    /// Copy mode: vi-style selection within a pane's screen text.
+    pub copy_mode: bool,
+    pub copy_cursor_row: usize,
+    pub copy_cursor_col: usize,
+    pub copy_start: Option<(usize, usize)>,
+    pub copy_selection: Option<((usize, usize), (usize, usize))>,
+    pub copy_pane: Option<usize>,
     pub show_help: bool,
     pub zoomed: bool,
     pub side_by_side: bool,
@@ -231,6 +238,13 @@ impl App {
             pane_search_matches: Vec::new(),
             pane_search_selected: 0,
             pane_search_pane: None,
+            // Copy mode: vi-style selection within a pane's screen text.
+            copy_mode: false,
+            copy_cursor_row: 0,
+            copy_cursor_col: 0,
+            copy_start: None,
+            copy_selection: None,
+            copy_pane: None,
             show_help: false,
             zoomed: false,
             side_by_side: false,
@@ -636,6 +650,13 @@ impl App {
         }
         self.pane_search_matches = matches;
         self.pane_search_selected = 0;
+    }
+
+    /// Update copy selection end based on current cursor position.
+    pub fn update_copy_selection(&mut self) {
+        if let Some(start) = self.copy_start {
+            self.copy_selection = Some((start, (self.copy_cursor_row, self.copy_cursor_col)));
+        }
     }
 
     /// Compact summary of live state, exposed to modules via $TERM_JSON.
@@ -2303,6 +2324,91 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
         return;
     }
 
+    // Copy mode: vi-style selection within a pane's screen text.
+    if app.copy_mode {
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => {
+                app.copy_mode = false;
+                app.copy_selection = None;
+                app.copy_start = None;
+            }
+            KeyCode::Char('v') => {
+                app.copy_start = Some((app.copy_cursor_row, app.copy_cursor_col));
+                app.copy_selection = Some(((app.copy_cursor_row, app.copy_cursor_col),
+                                           (app.copy_cursor_row, app.copy_cursor_col)));
+            }
+            KeyCode::Char('y') => {
+                if let Some(((r1, c1), (r2, c2))) = &app.copy_selection {
+                    let (r1, c1, r2, c2) = (*r1, *c1, *r2, *c2);
+                    let pane_idx = app.copy_pane.unwrap_or(app.active_pane);
+                    if let Some(pane) = app.panes.get_mut(pane_idx) {
+                        if let Some(pty) = &pane.pty {
+                            let screen = pty.screen_text();
+                            let lines: Vec<&str> = screen.lines().collect();
+                            let (r_start, r_end) = if r1 <= r2 { (r1, r2) } else { (r2, r1) };
+                            let (c_start, c_end) = if c1 <= c2 { (c1, c2) } else { (c2, c1) };
+                            let mut text = String::new();
+                            for r in r_start..=r_end {
+                                if let Some(line) = lines.get(r) {
+                                    let cols = line.chars().count();
+                                    let cs = c_start.min(cols);
+                                    let ce = c_end.min(cols);
+                                    if cs < ce {
+                                        let selected: String = line.chars().skip(cs).take(ce - cs).collect();
+                                        if r > r_start { text.push('\n'); }
+                                        text.push_str(&selected);
+                                    }
+                                }
+                            }
+                            let copied = if cfg!(target_os = "linux") {
+                                std::process::Command::new("wl-copy")
+                                    .stdin(std::process::Stdio::piped())
+                                    .spawn()
+                                    .and_then(|mut child| {
+                                        use std::io::Write;
+                                        child.stdin.take().unwrap().write_all(text.as_bytes())
+                                    })
+                                    .is_ok()
+                            } else {
+                                false
+                            };
+                            if copied {
+                                app.status_message = format!("copied {} chars to clipboard", text.len());
+                            } else {
+                                app.status_message = format!("selected {} chars (no clipboard)", text.len());
+                            }
+                        }
+                    }
+                }
+                app.copy_mode = false;
+                app.copy_selection = None;
+                app.copy_start = None;
+            }
+            KeyCode::Char('h') | KeyCode::Left => {
+                if app.copy_cursor_col > 0 {
+                    app.copy_cursor_col -= 1;
+                }
+                app.update_copy_selection();
+            }
+            KeyCode::Char('l') | KeyCode::Right => {
+                app.copy_cursor_col += 1;
+                app.update_copy_selection();
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                if app.copy_cursor_row > 0 {
+                    app.copy_cursor_row -= 1;
+                }
+                app.update_copy_selection();
+            }
+            KeyCode::Char('j') | KeyCode::Down => {
+                app.copy_cursor_row += 1;
+                app.update_copy_selection();
+            }
+            _ => {}
+        }
+        return;
+    }
+
     // Pane scrollback search: "/" searches within the active pane's screen text.
     if app.pane_search_mode {
         match key.code {
@@ -2385,6 +2491,15 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
             app.pane_search_matches.clear();
             app.pane_search_selected = 0;
             app.pane_search_pane = Some(app.active_pane);
+        }
+        (KeyCode::Char('v'), _) if !app.command_mode && !app.delegate_mode && !app.commander_mode && !app.pane_search_mode => {
+            app.copy_mode = true;
+            app.copy_cursor_row = 0;
+            app.copy_cursor_col = 0;
+            app.copy_start = None;
+            app.copy_selection = None;
+            app.copy_pane = Some(app.active_pane);
+            app.status_message = "copy mode: v start, y yank, hjkl move, q quit".to_string();
         }
         (KeyCode::Char('>'), _) => app.commander_open(),
         (KeyCode::Char('o'), _) => app.inbox_toggle(),
