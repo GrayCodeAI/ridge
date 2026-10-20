@@ -12,4 +12,6 @@ Welcome to Term docs.
 - [Configuration](./config.md)
 - [Modules](./modules.md)
 - [Agents](./agents.md)
+- [Socket API](./socket-api.md)
+- [UHP 1.0 Protocol](./uhp.md)
 EOF
