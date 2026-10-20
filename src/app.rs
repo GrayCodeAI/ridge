@@ -305,7 +305,7 @@ impl App {
                 reg.register_all();
                 reg
             },
-            machine_manager: MachineManager::new(),
+            machine_manager: MachineManager::load(),
             language: lang_str.parse().unwrap_or_default(),
             worktree_provider_registry: {
                 let mut reg = WorktreeProviderRegistry::new();
@@ -1593,12 +1593,19 @@ impl App {
                         session: None,
                     };
                     self.machine_manager.add_machine(profile);
+                    let _ = self.machine_manager.save();
                     self.status_message = format!("machine added: {}", parts[2]);
                 } else if parts.len() >= 3 && parts[1] == "use" {
                     if self.machine_manager.set_active(parts[2]) {
+                        let _ = self.machine_manager.save();
                         self.status_message = format!("active machine: {}", parts[2]);
                     } else {
                         self.status_message = format!("machine not found: {}", parts[2]);
+                    }
+                } else if parts.len() >= 3 && parts[1] == "attach" {
+                    match self.machine_manager.attach(parts[2]) {
+                        Ok(()) => self.status_message = format!("detached from {}", parts[2]),
+                        Err(e) => self.status_message = format!("ssh attach failed: {e}"),
                     }
                 } else if parts.len() >= 3 && parts[1] == "ssh" {
                     if let Some(cmd) = self.machine_manager.ssh_command(parts[2]) {
@@ -1606,8 +1613,15 @@ impl App {
                     } else {
                         self.status_message = format!("machine not found: {}", parts[2]);
                     }
+                } else if parts.len() >= 3 && parts[1] == "remove" {
+                    if self.machine_manager.remove_machine(parts[2]) {
+                        let _ = self.machine_manager.save();
+                        self.status_message = format!("machine removed: {}", parts[2]);
+                    } else {
+                        self.status_message = format!("machine not found: {}", parts[2]);
+                    }
                 } else {
-                    self.status_message = "usage: machine list | add <id> <name> <host> <port> <user> | use <id> | ssh <id>".to_string();
+                    self.status_message = "usage: machine list | add <id> <name> <host> <port> <user> | use <id> | attach <id> | ssh <id> | remove <id>".to_string();
                 }
             }
             "config" => {
