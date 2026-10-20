@@ -1709,6 +1709,67 @@ impl App {
                         "usage: module list | install <url> [name] | remove <name> | run <action_id> | worktree create <provider> <branch> | worktree remove <provider> <path> [identity]".to_string();
                 }
             }
+            "plugin" => {
+                // Plugins marketplace (Herdr-inspired). Plugins are modules with
+                // a marketplace index for discovery.
+                let dir = crate::core::modules::modules_dir();
+                let _ = std::fs::create_dir_all(&dir);
+                if parts.len() >= 2 && parts[1] == "list" {
+                    let mods = crate::core::modules::discover();
+                    if mods.is_empty() {
+                        self.status_message = "plugins: none installed".to_string();
+                    } else {
+                        let mut msg = String::from("installed plugins:\n");
+                        for m in mods {
+                            msg.push_str(&format!(
+                                "  {}\n",
+                                m.file_name().unwrap_or_default().to_string_lossy()
+                            ));
+                        }
+                        self.status_message = msg;
+                    }
+                } else if parts.len() >= 4 && parts[1] == "install" {
+                    let url = parts[2].to_string();
+                    let name = parts.get(3).map(|s| s.to_string()).unwrap_or_else(|| {
+                        url.rsplit('/').next().unwrap_or("plugin.sh").to_string()
+                    });
+                    let dest = dir.join(&name);
+                    let out = std::process::Command::new("curl")
+                        .arg("-fsSL")
+                        .arg(&url)
+                        .arg("-o")
+                        .arg(&dest)
+                        .output();
+                    match out {
+                        Ok(o) if o.status.success() => {
+                            #[cfg(unix)]
+                            {
+                                use std::os::unix::fs::PermissionsExt;
+                                let _ = std::fs::set_permissions(
+                                    &dest,
+                                    std::fs::Permissions::from_mode(0o755),
+                                );
+                            }
+                            self.status_message = format!("installed plugin: {name}");
+                        }
+                        Ok(o) => {
+                            let _ = std::fs::remove_file(&dest);
+                            self.status_message = format!("plugin install failed (curl {:?})", o.status);
+                        }
+                        Err(e) => self.status_message = format!("plugin install error: {e}"),
+                    }
+                } else if parts.len() >= 3 && parts[1] == "remove" {
+                    let dest = dir.join(parts[2]);
+                    match std::fs::remove_file(&dest) {
+                        Ok(()) => self.status_message = format!("removed plugin {}", parts[2]),
+                        Err(e) => self.status_message = format!("plugin remove failed: {e}"),
+                    }
+                } else if parts.len() >= 2 && parts[1] == "marketplace" {
+                    self.status_message = "plugin marketplace: https://github.com/GrayCodeAI/term-plugins\n  :plugin install <url> [name]  — install from any URL\n  :plugin list                  — list installed plugins\n  :plugin remove <name>         — remove a plugin".to_string();
+                } else {
+                    self.status_message = "usage: plugin list | install <url> [name] | remove <name> | marketplace".to_string();
+                }
+            }
             "worktree" => {
                 if parts.len() >= 2 && parts[1] == "list" {
                     self.status_message = crate::core::worktree::list_worktrees(&self.cwd);
