@@ -3,6 +3,7 @@
 #![allow(clippy::uninlined_format_args)]
 use anyhow::Result;
 use clap::Parser;
+use std::sync::{Arc, Mutex};
 use tracing_subscriber::EnvFilter;
 
 mod agents;
@@ -42,6 +43,17 @@ async fn main() -> Result<()> {
 
     if cli.update {
         return crate::core::update::run_update(env!("CARGO_PKG_VERSION"));
+    }
+
+    if cli.uhp {
+        let registry = Arc::new(Mutex::new(crate::core::uhp::UhpcRegistry::new()));
+        // Register built-in methods
+        registry.lock().unwrap().register("list_panes", |_params| {
+            // This would need App access; for now return empty
+            Ok(serde_json::json!([]))
+        });
+        crate::core::uhp::UhpcServer::new(registry).start()?;
+        return Ok(());
     }
 
     app::run(config, cli).await

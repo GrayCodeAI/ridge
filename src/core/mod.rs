@@ -16,3 +16,4 @@ pub mod update;
 pub mod clipboard_image;
 pub mod machine;
 pub mod i18n;
+pub mod uhp;
