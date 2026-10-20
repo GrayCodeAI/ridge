@@ -56,5 +56,10 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
+    if cli.web {
+        let state = Arc::new(crate::core::web::WebState::new());
+        return crate::core::web::start_web(state, 8080).await.map_err(|e| anyhow::anyhow!(e));
+    }
+
     app::run(config, cli).await
 }

@@ -32,6 +32,11 @@ anyhow = "1"
 portable-pty = "0.8"
 vt100 = "0.15"
 
+# Luvus Web — browser client for live workspaces
+axum = { version = "0.7", features = ["ws"] }
+tokio-tungstenite = "0.21"
+futures-util = "0.3"
+
 [profile.release]
 lto = true
 codegen-units = 1
