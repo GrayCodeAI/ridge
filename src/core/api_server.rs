@@ -30,6 +30,7 @@ enum ApiCommand {
     SpawnAgent { agent: String, cwd: Option<String> },
     SendMessage { pane: usize, message: String },
     ClosePane { pane: usize },
+    GetOutput { pane: usize, cursor: usize },
 }
 
 /// Outgoing API response.
@@ -102,6 +103,26 @@ fn handle_command(app: &Arc<Mutex<crate::app::App>>, cmd: ApiCommand) -> ApiResp
             app.close_pane_by_id(pane);
             ApiResponse::Ok {
                 data: json!({ "pane": pane, "closed": true }),
+            }
+        }
+        ApiCommand::GetOutput { pane, cursor } => {
+            let app = app.lock().unwrap();
+            if let Some(pane) = app.panes.iter().find(|p| p.id == pane) {
+                if let Some(pty) = &pane.pty {
+                    let (chunk, next_cursor) = pty.take_raw_since(cursor);
+                    let output = String::from_utf8_lossy(&chunk).to_string();
+                    ApiResponse::Ok {
+                        data: json!({ "pane": pane.id, "output": output, "next_cursor": next_cursor }),
+                    }
+                } else {
+                    ApiResponse::Err {
+                        message: format!("pane {} has no PTY", pane.id),
+                    }
+                }
+            } else {
+                ApiResponse::Err {
+                    message: format!("pane {} not found", pane),
+                }
             }
         }
     }
