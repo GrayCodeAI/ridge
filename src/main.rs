@@ -31,5 +31,14 @@ async fn main() -> Result<()> {
     tracing::info!("term starting (version {})", env!("CARGO_PKG_VERSION"));
 
     let config = config::Config::load()?;
+
+    if cli.api {
+        let app = std::sync::Arc::new(std::sync::Mutex::new(
+            crate::app::App::new(config),
+        ));
+        crate::core::api_server::start_server(app)?;
+        return Ok(());
+    }
+
     app::run(config, cli).await
 }

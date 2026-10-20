@@ -11,3 +11,4 @@ pub mod race;
 pub mod session;
 pub mod workspace;
 pub mod worktree;
+pub mod api_server;
