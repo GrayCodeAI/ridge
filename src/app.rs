@@ -2495,7 +2495,7 @@ mod race_gate_tests {
         let wt = crate::core::worktree::worktree_base(&a.cwd).join("race-gate-test");
         crate::core::worktree::create_worktree(&a.cwd, "race-gate-test", &wt).unwrap();
 
-        let mut race = Race {
+        let race = Race {
             prompt: "fix it".to_string(),
             contestants: vec![contestant(wt, "race-gate-test")],
             gate_cmd: Some("false".to_string()), // failing gate
