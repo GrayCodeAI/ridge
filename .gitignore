@@ -1,6 +1,37 @@
-/target
+# Compiled output
+/target/
+*.pdb
+
+# Remove `*.log` from gitignore if you want to keep logs in version control
 *.log
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Coverage output
+tarpaulin/
+cov/
+coverage/
+
+# Rust / Cargo
+.cargo/vendor/
+*.rs.bak
+
+# Term application data
 .term/
 .term-*.json
 .term-worktrees/
+
+# Documentation build output
 docs/book/
