@@ -81,6 +81,14 @@ impl TaskBoard {
         Self::default()
     }
 
+    pub fn next_id(&self) -> u64 {
+        self.next_id
+    }
+
+    pub fn set_next_id(&mut self, id: u64) {
+        self.next_id = id;
+    }
+
     /// Persist the board to `<repo>/.term-tasks.json`.
     pub fn save(&self, repo: &Path) -> Result<(), String> {
         let path = repo.join(".term-tasks.json");
