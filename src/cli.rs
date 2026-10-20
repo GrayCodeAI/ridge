@@ -26,4 +26,8 @@ pub struct Cli {
     /// Restore panes from the previously saved session.
     #[arg(long)]
     pub restore: bool,
+
+    /// Start the agent-native socket API server (Unix domain socket).
+    #[arg(long)]
+    pub api: bool,
 }
