@@ -12,6 +12,7 @@ pub struct Account {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub theme: String,
+    pub language: String,
     pub keybindings: Keybindings,
     pub accounts: Vec<Account>,
     pub active_account: std::collections::BTreeMap<String, String>,
@@ -26,10 +27,15 @@ fn default_notify() -> bool {
     true
 }
 
+fn default_language() -> String {
+    "en".to_string()
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
             theme: String::new(),
+            language: default_language(),
             keybindings: Keybindings::default(),
             accounts: Vec::new(),
             active_account: std::collections::BTreeMap::new(),
