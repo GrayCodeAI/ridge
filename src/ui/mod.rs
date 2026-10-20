@@ -2,8 +2,8 @@ use crate::app::{App, Tab};
 use crate::core::agent::AgentStatus;
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
+    layout::{Constraint, Direction, Layout, Rect},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Tabs},
 };
@@ -17,7 +17,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
         return;
     }
 
-    let extra = if app.command_mode || app.delegate_mode || app.search_mode || app.commander_mode {
+    let extra = if app.command_mode || app.delegate_mode || app.search_mode || app.commander_mode || app.pane_search_mode {
         1
     } else {
         0
@@ -47,6 +47,9 @@ pub fn render(f: &mut Frame, app: &mut App) {
         idx += 1;
     } else if app.commander_mode {
         render_commander_bar(f, app, chunks[idx]);
+        idx += 1;
+    } else if app.pane_search_mode {
+        render_pane_search_bar(f, app, chunks[idx]);
         idx += 1;
     }
     render_status(f, app, chunks[idx]);
@@ -202,6 +205,20 @@ fn render_search_bar(f: &mut Frame, app: &App, area: Rect) {
             .collect()
     };
     let para = Paragraph::new(shown.join("  ")).style(Style::default().fg(palette.accent));
+    f.render_widget(para, area);
+}
+
+/// Pane scrollback search bar: shows search query and match count.
+fn render_pane_search_bar(f: &mut Frame, app: &App, area: Rect) {
+    let palette = app.theme_palette();
+    let total = app.pane_search_matches.len();
+    let idx = app.pane_search_selected.min(total.saturating_sub(1));
+    let text = if total == 0 {
+        format!("search: {} (no matches)", app.pane_search_buffer)
+    } else {
+        format!("search: {} [{}/{}]", app.pane_search_buffer, idx + 1, total)
+    };
+    let para = Paragraph::new(text).style(Style::default().fg(palette.warning));
     f.render_widget(para, area);
 }
 
@@ -425,9 +442,36 @@ fn render_terminal_for(f: &mut Frame, app: &App, area: Rect, pane_idx: usize) {
 
     if let Some(pane) = app.panes.get(pane_idx) {
         if let Some(pty) = &pane.pty {
-            let text = pty.screen_text();
-            let para = Paragraph::new(text).style(Style::default().fg(palette.fg));
-            f.render_widget(para, main_inner);
+            let screen = pty.screen_text();
+            // Highlight search matches if in pane search mode targeting this pane.
+            if app.pane_search_mode
+                && app.pane_search_pane == Some(pane_idx)
+                && !app.pane_search_buffer.is_empty()
+            {
+                let query = &app.pane_search_buffer;
+                let mut lines: Vec<Line> = Vec::new();
+                for line in screen.lines() {
+                    let mut spans: Vec<Span> = Vec::new();
+                    let mut remaining = line;
+                    while let Some(pos) = remaining.find(query) {
+                        let (before, after) = remaining.split_at(pos);
+                        let (matched, rest) = after.split_at(query.len());
+                        spans.push(Span::raw(before));
+                        spans.push(Span::styled(
+                            matched,
+                            Style::default().fg(palette.warning).add_modifier(Modifier::BOLD),
+                        ));
+                        remaining = rest;
+                    }
+                    spans.push(Span::raw(remaining));
+                    lines.push(Line::from(spans));
+                }
+                let para = Paragraph::new(lines).style(Style::default().fg(palette.fg));
+                f.render_widget(para, main_inner);
+            } else {
+                let para = Paragraph::new(screen).style(Style::default().fg(palette.fg));
+                f.render_widget(para, main_inner);
+            }
         } else {
             let p = Paragraph::new("No PTY attached.")
                 .style(Style::default().fg(palette.muted));
@@ -844,7 +888,7 @@ const HELP_TEXT: &str = "Keybindings\n\
   [ ]  switch pane        o  reply inbox      j  k  scroll\n\
   n / p  next/prev hunk (Diff)\n\
   :  command mode         =  delegate         >  commander (targeted msg)\n\
-  ?  toggle this help     Esc  close prompt/overlay\n\n\
+  /  pane search          ?  toggle help      Esc  close prompt/overlay\n\n\
 Commands\n\
   spawn <agent> · close · delegate <pane> <msg> · broadcast <msg>\n\
   race <prompt> · race winner <idx> [force] · race gate <idx>

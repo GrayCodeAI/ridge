@@ -158,6 +158,12 @@ pub struct App {
     pub search_buffer: String,
     pub search_results: Vec<String>,
     pub search_selected: usize,
+    /// Pane scrollback search: active search query and matches within a pane.
+    pub pane_search_mode: bool,
+    pub pane_search_buffer: String,
+    pub pane_search_matches: Vec<(usize, usize)>, // (row, col) positions in screen
+    pub pane_search_selected: usize,
+    pub pane_search_pane: Option<usize>,
     pub show_help: bool,
     pub zoomed: bool,
     pub side_by_side: bool,
@@ -220,6 +226,11 @@ impl App {
             search_buffer: String::new(),
             search_results: Vec::new(),
             search_selected: 0,
+            pane_search_mode: false,
+            pane_search_buffer: String::new(),
+            pane_search_matches: Vec::new(),
+            pane_search_selected: 0,
+            pane_search_pane: None,
             show_help: false,
             zoomed: false,
             side_by_side: false,
@@ -595,6 +606,36 @@ impl App {
         } else {
             s
         }
+    }
+
+    /// Refresh pane search matches for the current search buffer.
+    pub fn refresh_pane_search(&mut self) {
+        let Some(pane_idx) = self.pane_search_pane else {
+            return;
+        };
+        let Some(pane) = self.panes.get(pane_idx) else {
+            return;
+        };
+        let Some(pty) = &pane.pty else {
+            return;
+        };
+        let screen = pty.screen_text();
+        let query = self.pane_search_buffer.clone();
+        if query.is_empty() {
+            self.pane_search_matches.clear();
+            self.pane_search_selected = 0;
+            return;
+        }
+        let mut matches: Vec<(usize, usize)> = Vec::new();
+        for (row, line) in screen.lines().enumerate() {
+            let mut start = 0;
+            while let Some(pos) = line[start..].find(&query) {
+                matches.push((row, start + pos));
+                start += pos + 1;
+            }
+        }
+        self.pane_search_matches = matches;
+        self.pane_search_selected = 0;
     }
 
     /// Compact summary of live state, exposed to modules via $TERM_JSON.
@@ -2262,6 +2303,32 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
         return;
     }
 
+    // Pane scrollback search: "/" searches within the active pane's screen text.
+    if app.pane_search_mode {
+        match key.code {
+            KeyCode::Esc => {
+                app.pane_search_mode = false;
+                app.pane_search_buffer.clear();
+                app.pane_search_matches.clear();
+                app.pane_search_selected = 0;
+            }
+            KeyCode::Enter => {
+                // Jump to next match.
+                app.pane_search_selected = (app.pane_search_selected + 1) % app.pane_search_matches.len().max(1);
+            }
+            KeyCode::Backspace => {
+                app.pane_search_buffer.pop();
+                app.refresh_pane_search();
+            }
+            KeyCode::Char(c) => {
+                app.pane_search_buffer.push(c);
+                app.refresh_pane_search();
+            }
+            _ => {}
+        }
+        return;
+    }
+
     // Command mode: capture input into buffer.
     if app.command_mode {
         match key.code {
@@ -2312,6 +2379,13 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
 
     match (key.code, key.modifiers) {
         (KeyCode::Char('?'), _) => app.show_help = !app.show_help,
+        (KeyCode::Char('/'), _) if !app.command_mode && !app.delegate_mode && !app.commander_mode => {
+            app.pane_search_mode = true;
+            app.pane_search_buffer.clear();
+            app.pane_search_matches.clear();
+            app.pane_search_selected = 0;
+            app.pane_search_pane = Some(app.active_pane);
+        }
         (KeyCode::Char('>'), _) => app.commander_open(),
         (KeyCode::Char('o'), _) => app.inbox_toggle(),
         (KeyCode::Esc, _) => {
