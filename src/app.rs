@@ -4,6 +4,7 @@ use crate::core::agent::{AgentRegistry, AgentStatus};
 use crate::core::inbox::Inbox;
 use crate::core::pty::PtySession;
 use crate::core::queue::Queue;
+use crate::core::modules::ModuleRegistry;
 use crate::core::workspace::{PaneRef, WorkspaceManager};
 use crate::event::{Event, EventHandler};
 use crate::ui;
@@ -194,6 +195,9 @@ pub struct App {
     pub commander_targets: Vec<PaneRef>,
     pub commander_preview: Vec<usize>,
     pub commander_message: String,
+
+    /// Module registry: actions, events, docks, bars, settings.
+    pub module_registry: ModuleRegistry,
 }
 
 impl App {
@@ -250,6 +254,11 @@ impl App {
             commander_targets: Vec::new(),
             commander_preview: Vec::new(),
             commander_message: String::new(),
+            module_registry: {
+                let mut reg = ModuleRegistry::new();
+                reg.register_all();
+                reg
+            },
         };
         app.module_outputs = crate::core::modules::run_all(&app.module_state_json());
         app
@@ -1500,9 +1509,14 @@ impl App {
                         Ok(()) => self.status_message = format!("removed module {}", parts[2]),
                         Err(e) => self.status_message = format!("remove failed: {e}"),
                     }
+                } else if parts.len() >= 3 && parts[1] == "run" {
+                    match self.module_registry.run_action(parts[2]) {
+                        Ok(()) => self.status_message = format!("module action: {}", parts[2]),
+                        Err(e) => self.status_message = format!("module action failed: {e}"),
+                    }
                 } else {
                     self.status_message =
-                        "usage: module list | install <url> [name] | remove <name>".to_string();
+                        "usage: module list | install <url> [name] | remove <name> | run <action_id>".to_string();
                 }
             }
             "worktree" => {
@@ -1627,7 +1641,7 @@ impl App {
             }
             "help" => {
                 self.status_message =
-                    "commands: spawn <agent>, close, delegate <pane> <msg>, broadcast <msg>, session save/clear, export costs/session, module list/install <url> [name]/remove <name>, ssh <host>, account list/add/env/show, config show/theme, task add/start/done/lease/gate/merge/filter/kanban/fanout, worktree list/add/remove, branch".to_string();
+                    "commands: spawn <agent>, close, delegate <pane> <msg>, broadcast <msg>, session save/clear, export costs/session, module list/install <url> [name]/remove <name>/run <action_id>, ssh <host>, account list/add/env/show, config show/theme, task add/start/done/lease/gate/merge/filter/kanban/fanout, worktree list/add/remove, branch".to_string();
             }
             other => {
                 self.status_message = format!("unknown command: {other}");
