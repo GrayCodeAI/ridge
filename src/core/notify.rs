@@ -1,4 +1,4 @@
-//! OS notifications when agents need the user (blocked / finished).
+//! OS notifications and sound alerts when agents need the user (blocked / finished).
 //! Commands are literal argument vectors — no shell — so titles and bodies
 //! can never inject anything.
 
@@ -40,12 +40,50 @@ pub fn command_for(title: &str, body: &str) -> Option<(String, Vec<String>)> {
     }
 }
 
-/// Fire-and-forget a notification. Never blocks on completion.
+/// Build the sound-alert command for the current platform.
+/// Plays a short attention sound when an agent blocks or finishes.
+/// Returns `(program, args)` or None on platforms without support.
+pub fn sound_command() -> Option<(String, Vec<String>)> {
+    #[cfg(target_os = "linux")]
+    {
+        // paplay is standard on PulseAudio/PipeWire systems.
+        Some(("paplay".to_string(), vec!["/usr/share/sounds/freedesktop/stereo/complete.oga".to_string()]))
+    }
+    #[cfg(target_os = "macos")]
+    {
+        // afplay plays the system default sound.
+        Some(("afplay".to_string(), vec!["/System/Library/Sounds/Pop.aiff".to_string()]))
+    }
+    #[cfg(target_os = "windows")]
+    {
+        None
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    {
+        None
+    }
+}
+
+/// Fire-and-forget an OS notification. Never blocks on completion.
 pub fn notify(title: &str, body: &str) -> bool {
     let Some((program, args)) = command_for(title, body) else {
         return false;
     };
     Command::new(&program).args(&args).spawn().is_ok()
+}
+
+/// Fire-and-forget a sound alert. Never blocks on completion.
+pub fn sound() -> bool {
+    let Some((program, args)) = sound_command() else {
+        return false;
+    };
+    Command::new(&program).args(&args).spawn().is_ok()
+}
+
+/// Notify + sound together when an agent needs attention.
+pub fn alert(title: &str, body: &str) {
+    let _ = notify(title, body);
+    let _ = sound();
 }
 
 #[cfg(test)]
@@ -83,5 +121,10 @@ mod tests {
         // On unsupported platforms this is a safe no-op returning false;
         // on supported ones it spawns (result depends on the environment).
         let _ = notify("term test", "if you can read this in a toast, hooks work");
+    }
+
+    #[test]
+    fn sound_never_panics_on_unsupported_platforms() {
+        let _ = sound();
     }
 }

@@ -609,6 +609,11 @@ impl App {
         format!("{{\"panes\":{panes},\"blocked\":{blocked},\"tasks\":{tasks}}}")
     }
 
+    /// Resolve the current theme's color palette.
+    pub fn theme_palette(&self) -> crate::ui::ThemePalette {
+        crate::ui::ThemePalette::named(&self.config.theme)
+    }
+
     // ---- Workspace management ------------------------------------------------
 
     pub fn active_workspace(&self) -> Option<&crate::core::workspace::Workspace> {
@@ -2105,7 +2110,7 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
                         } else {
                             "finished"
                         };
-                        crate::core::notify::notify(&format!("Term — {}", pane.title), why);
+                        crate::core::notify::alert(&format!("Term — {}", pane.title), why);
                     }
                 }
                 pane.status = new_status;
@@ -2114,7 +2119,7 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
                         pane.attention = true;
                         attention_hits += 1;
                         if hooks_on {
-                            crate::core::notify::notify(
+                            crate::core::notify::alert(
                                 &format!("Term — {}", pane.title),
                                 "session ended",
                             );
