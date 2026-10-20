@@ -52,7 +52,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
     render_status(f, app, chunks[idx]);
 
     if app.show_help {
-        render_help(f, size);
+        render_help(f, app, size);
     }
     if app.show_inbox {
         render_inbox(f, app, size);
@@ -61,6 +61,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
 
 /// Inbox overlay: captured replies from delegated prompts, newest first.
 fn render_inbox(f: &mut Frame, app: &App, area: Rect) {
+    let palette = app.theme_palette();
     let popup = centered_rect(66, 80, area);
     f.render_widget(Clear, popup);
     let block = Block::default()
@@ -112,11 +113,12 @@ fn render_inbox(f: &mut Frame, app: &App, area: Rect) {
         );
     }
     let text = lines.join("\n");
-    let para = Paragraph::new(text).style(Style::default().fg(Color::White));
+    let para = Paragraph::new(text).style(Style::default().fg(palette.fg));
     f.render_widget(para, inner);
 }
 
 fn render_mobile(f: &mut Frame, app: &mut App, area: Rect) {
+    let palette = app.theme_palette();
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -130,32 +132,35 @@ fn render_mobile(f: &mut Frame, app: &mut App, area: Rect) {
         " Term mobile | pane {} | {} ",
         app.active_pane, app.status_message
     ))
-    .style(Style::default().fg(Color::Cyan));
+    .style(Style::default().fg(palette.accent));
     f.render_widget(header, chunks[0]);
 
     // Reuse agents body for the single pane.
     render_agents(f, app, chunks[1]);
 
     let footer = Paragraph::new(" n:spawn  x:close  r:resume  f:fork  :cmd  q:quit ")
-        .style(Style::default().fg(Color::DarkGray));
+        .style(Style::default().fg(palette.muted));
     f.render_widget(footer, chunks[2]);
 }
 
 fn render_command_bar(f: &mut Frame, app: &App, area: Rect) {
+    let palette = app.theme_palette();
     let para = Paragraph::new(format!(":{}", app.command_buffer))
-        .style(Style::default().fg(Color::Yellow));
+        .style(Style::default().fg(palette.warning));
     f.render_widget(para, area);
 }
 
 fn render_delegate_bar(f: &mut Frame, app: &App, area: Rect) {
+    let palette = app.theme_palette();
     let para = Paragraph::new(format!("={}", app.delegate_buffer))
-        .style(Style::default().fg(Color::Green));
+        .style(Style::default().fg(palette.success));
     f.render_widget(para, area);
 }
 
 /// Commander bar: bottom composer for targeted messaging to specific panes.
 /// Shows `> draft [targets]` with optional status.
 fn render_commander_bar(f: &mut Frame, app: &App, area: Rect) {
+    let palette = app.theme_palette();
     let target_count = app.commander_targets.len();
     let targets_str = if target_count > 0 {
         format!(" [{target_count} target(s)]")
@@ -173,11 +178,12 @@ fn render_commander_bar(f: &mut Frame, app: &App, area: Rect) {
         targets_str,
         status
     );
-    let para = Paragraph::new(text).style(Style::default().fg(Color::Magenta));
+    let para = Paragraph::new(text).style(Style::default().fg(palette.accent));
     f.render_widget(para, area);
 }
 
 fn render_search_bar(f: &mut Frame, app: &App, area: Rect) {
+    let palette = app.theme_palette();
     let shown: Vec<String> = if app.search_results.is_empty() {
         vec![format!("/{}  (no matches)", app.search_buffer)]
     } else {
@@ -195,30 +201,103 @@ fn render_search_bar(f: &mut Frame, app: &App, area: Rect) {
             })
             .collect()
     };
-    let para = Paragraph::new(shown.join("  ")).style(Style::default().fg(Color::Magenta));
+    let para = Paragraph::new(shown.join("  ")).style(Style::default().fg(palette.accent));
     f.render_widget(para, area);
 }
 
-fn theme_accent(theme: &str) -> Color {
-    match theme {
-        "light" => Color::Blue,
-        "amber" => Color::Yellow,
-        "green" => Color::Green,
-        "red" => Color::Red,
-        "magenta" => Color::Magenta,
-        _ => Color::Cyan,
-    }
+/// Named color palette for a theme.
+#[derive(Debug, Clone, Copy)]
+pub struct ThemePalette {
+    pub bg: Color,
+    pub fg: Color,
+    pub accent: Color,
+    pub muted: Color,
+    pub success: Color,
+    pub warning: Color,
+    pub error: Color,
 }
 
-fn theme_bg(theme: &str) -> Color {
-    match theme {
-        "light" => Color::White,
-        _ => Color::Black,
+impl ThemePalette {
+    pub fn named(theme: &str) -> Self {
+        match theme {
+            "light" => Self {
+                bg: Color::White,
+                fg: Color::Black,
+                accent: Color::Blue,
+                muted: Color::DarkGray,
+                success: Color::Green,
+                warning: Color::Yellow,
+                error: Color::Red,
+            },
+            "dark" | "" => Self {
+                bg: Color::Black,
+                fg: Color::White,
+                accent: Color::Cyan,
+                muted: Color::Gray,
+                success: Color::Green,
+                warning: Color::Yellow,
+                error: Color::Red,
+            },
+            "ocean" => Self {
+                bg: Color::Black,
+                fg: Color::Cyan,
+                accent: Color::LightCyan,
+                muted: Color::DarkGray,
+                success: Color::Green,
+                warning: Color::Yellow,
+                error: Color::LightRed,
+            },
+            "forest" => Self {
+                bg: Color::Black,
+                fg: Color::Green,
+                accent: Color::LightGreen,
+                muted: Color::DarkGray,
+                success: Color::Green,
+                warning: Color::Yellow,
+                error: Color::LightRed,
+            },
+            "midnight" => Self {
+                bg: Color::Rgb(10, 10, 30),
+                fg: Color::White,
+                accent: Color::Magenta,
+                muted: Color::DarkGray,
+                success: Color::Green,
+                warning: Color::Yellow,
+                error: Color::LightRed,
+            },
+            "rose" => Self {
+                bg: Color::Rgb(25, 15, 20),
+                fg: Color::LightRed,
+                accent: Color::LightMagenta,
+                muted: Color::DarkGray,
+                success: Color::Green,
+                warning: Color::Yellow,
+                error: Color::LightRed,
+            },
+            "amber" => Self {
+                bg: Color::Black,
+                fg: Color::Yellow,
+                accent: Color::LightYellow,
+                muted: Color::DarkGray,
+                success: Color::Green,
+                warning: Color::Yellow,
+                error: Color::LightRed,
+            },
+            _ => Self {
+                bg: Color::Black,
+                fg: Color::White,
+                accent: Color::Cyan,
+                muted: Color::Gray,
+                success: Color::Green,
+                warning: Color::Yellow,
+                error: Color::Red,
+            },
+        }
     }
 }
 
 fn render_tabs(f: &mut Frame, app: &App, area: Rect) {
-    let accent = theme_accent(&app.config.theme);
+    let palette = app.theme_palette();
     let titles: Vec<Line> = Tab::ALL.iter().map(|t| Line::from(t.title())).collect();
     let selected = Tab::ALL
         .iter()
@@ -227,8 +306,8 @@ fn render_tabs(f: &mut Frame, app: &App, area: Rect) {
     let tabs = Tabs::new(titles)
         .block(Block::default().borders(Borders::ALL).title(" Term "))
         .select(selected)
-        .style(Style::default().fg(Color::White))
-        .highlight_style(Style::default().fg(accent).add_modifier(Modifier::BOLD));
+        .style(Style::default().fg(palette.fg))
+        .highlight_style(Style::default().fg(palette.accent).add_modifier(Modifier::BOLD));
     f.render_widget(tabs, area);
 }
 
@@ -245,6 +324,8 @@ fn render_body(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_agents(f: &mut Frame, app: &App, area: Rect) {
+    let palette = app.theme_palette();
+
     // Zoomed ('z'): active terminal takes the full width (sidebar hidden).
     if app.zoomed {
         render_terminal_for(f, app, area, app.active_pane);
@@ -264,9 +345,10 @@ fn render_agents(f: &mut Frame, app: &App, area: Rect) {
 
     if app.panes.is_empty() {
         let p = Paragraph::new("No panes.\n\nPress 'n' to spawn\nClaude Code.")
-            .style(Style::default().fg(Color::Gray));
+            .style(Style::default().fg(palette.muted));
         f.render_widget(p, inner);
     } else {
+        let palette = app.theme_palette();
         let items: Vec<ListItem> = app
             .panes
             .iter()
@@ -292,15 +374,15 @@ fn render_agents(f: &mut Frame, app: &App, area: Rect) {
                 let line = Line::from(vec![
                     Span::raw(marker),
                     Span::raw(indent),
-                    Span::styled(p.title.clone(), Style::default().fg(Color::White)),
+                    Span::styled(p.title.clone(), Style::default().fg(palette.fg)),
                     Span::raw(" "),
                     Span::styled(p.status.label(), Style::default().fg(status_color)),
-                    Span::styled(cost_str, Style::default().fg(Color::Magenta)),
+                    Span::styled(cost_str, Style::default().fg(palette.warning)),
                     Span::styled(
                         if p.attention { "  ⚠" } else { "" },
-                        Style::default().fg(Color::Red),
+                        Style::default().fg(palette.error),
                     ),
-                    Span::styled(sid_str, Style::default().fg(Color::DarkGray)),
+                    Span::styled(sid_str, Style::default().fg(palette.muted)),
                 ]);
                 ListItem::new(line)
             })
@@ -330,6 +412,7 @@ fn render_terminal(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_terminal_for(f: &mut Frame, app: &App, area: Rect, pane_idx: usize) {
+    let palette = app.theme_palette();
     let main_block = Block::default()
         .borders(Borders::ALL)
         .title(if app.panes.is_empty() {
@@ -343,20 +426,22 @@ fn render_terminal_for(f: &mut Frame, app: &App, area: Rect, pane_idx: usize) {
     if let Some(pane) = app.panes.get(pane_idx) {
         if let Some(pty) = &pane.pty {
             let text = pty.screen_text();
-            let para = Paragraph::new(text).style(Style::default().fg(Color::White));
+            let para = Paragraph::new(text).style(Style::default().fg(palette.fg));
             f.render_widget(para, main_inner);
         } else {
-            let p = Paragraph::new("No PTY attached.").style(Style::default().fg(Color::Gray));
+            let p = Paragraph::new("No PTY attached.")
+                .style(Style::default().fg(palette.muted));
             f.render_widget(p, main_inner);
         }
     } else {
         let p = Paragraph::new("Spawn an agent with 'n' (Claude Code).")
-            .style(Style::default().fg(Color::Gray));
+            .style(Style::default().fg(palette.muted));
         f.render_widget(p, main_inner);
     }
 }
 
 fn render_git(f: &mut Frame, app: &App, area: Rect) {
+    let palette = app.theme_palette();
     let block = Block::default().borders(Borders::ALL).title(" Git ");
     let inner = block.inner(area);
     f.render_widget(block, area);
@@ -383,7 +468,7 @@ fn render_git(f: &mut Frame, app: &App, area: Rect) {
         prs,
         issues
     );
-    let para = Paragraph::new(text).style(Style::default().fg(Color::White));
+    let para = Paragraph::new(text).style(Style::default().fg(palette.fg));
     f.render_widget(para, inner);
 }
 
@@ -590,6 +675,7 @@ fn trunc(s: &str, max: usize) -> String {
 }
 
 fn render_files(f: &mut Frame, app: &App, area: Rect) {
+    let palette = app.theme_palette();
     let block = Block::default()
         .borders(Borders::ALL)
         .title(" Files (j/k scroll) ");
@@ -599,7 +685,7 @@ fn render_files(f: &mut Frame, app: &App, area: Rect) {
     let lines: Vec<Line> = if app.files_cache.is_empty() {
         vec![Line::from(Span::styled(
             "(no tracked files or not a git repo)",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(palette.muted),
         ))]
     } else {
         app.files_cache
@@ -607,11 +693,11 @@ fn render_files(f: &mut Frame, app: &App, area: Rect) {
             .take(10_000)
             .map(|name| {
                 let tint = match app.files_status.get(name).copied() {
-                    Some('A') => Style::default().fg(Color::Green),
-                    Some('M') | Some('T') => Style::default().fg(Color::Yellow),
-                    Some('D') => Style::default().fg(Color::Red),
-                    Some('R') => Style::default().fg(Color::Magenta),
-                    Some('C') | Some('U') => Style::default().fg(Color::Cyan),
+                    Some('A') => Style::default().fg(palette.success),
+                    Some('M') | Some('T') => Style::default().fg(palette.warning),
+                    Some('D') => Style::default().fg(palette.error),
+                    Some('R') => Style::default().fg(palette.accent),
+                    Some('C') | Some('U') => Style::default().fg(palette.muted),
                     _ => Style::default(),
                 };
                 Line::from(Span::styled(name.clone(), tint))
@@ -626,6 +712,7 @@ fn render_files(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_orchestration(f: &mut Frame, app: &App, area: Rect) {
+    let palette = app.theme_palette();
     let block = Block::default()
         .borders(Borders::ALL)
         .title(" Orchestration ");
@@ -649,23 +736,25 @@ fn render_orchestration(f: &mut Frame, app: &App, area: Rect) {
             .collect::<Vec<_>>()
             .join("\n")
     );
-    let para = Paragraph::new(text).style(Style::default().fg(Color::White));
+    let para = Paragraph::new(text).style(Style::default().fg(palette.fg));
     f.render_widget(para, inner);
 }
 
 /// Single-glance mission-control panel: panes, race, queue, inbox, tasks.
 fn render_dashboard(f: &mut Frame, app: &App, area: Rect) {
+    let palette = app.theme_palette();
     let block = Block::default()
         .borders(Borders::ALL)
         .title(" Dashboard (7) — o inbox · a next blocked · :race · :queue ");
     let inner = block.inner(area);
     f.render_widget(block, area);
     let text = app.dashboard_lines().join("\n");
-    let para = Paragraph::new(text).style(Style::default().fg(Color::White));
+    let para = Paragraph::new(text).style(Style::default().fg(palette.fg));
     f.render_widget(para, inner);
 }
 
 fn render_settings(f: &mut Frame, app: &App, area: Rect) {
+    let palette = app.theme_palette();
     let block = Block::default().borders(Borders::ALL).title(" Settings ");
     let inner = block.inner(area);
     f.render_widget(block, area);
@@ -694,11 +783,12 @@ fn render_settings(f: &mut Frame, app: &App, area: Rect) {
         accounts,
         modules
     );
-    let para = Paragraph::new(text).style(Style::default().fg(Color::White));
+    let para = Paragraph::new(text).style(Style::default().fg(palette.fg));
     f.render_widget(para, inner);
 }
 
 fn render_status(f: &mut Frame, app: &App, area: Rect) {
+    let palette = app.theme_palette();
     let blocked = app
         .panes
         .iter()
@@ -717,11 +807,11 @@ fn render_status(f: &mut Frame, app: &App, area: Rect) {
     };
     let left = Span::styled(
         format!(" {}{}{} ", app.status_message, blocked_str, cost_str),
-        Style::default().fg(Color::White),
+        Style::default().fg(palette.fg),
     );
     let right = Span::styled(
         " q:quit  n:spawn  a:next-blocked  x:close  r:resume  f:fork  [/]:pane  ::cmd  Tab:tabs  ",
-        Style::default().fg(Color::DarkGray),
+        Style::default().fg(palette.muted),
     );
     let line = Line::from(vec![left, right]);
     let para = Paragraph::new(line);
@@ -767,14 +857,15 @@ Commands\n\
 Workspaces: create/switch with Tab/←→\n\
 Commander: > opens a bottom composer to message specific panes without focus switch.";
 
-fn render_help(f: &mut Frame, area: Rect) {
+fn render_help(f: &mut Frame, app: &App, area: Rect) {
+    let palette = app.theme_palette();
     let popup = centered_rect(66, 80, area);
     f.render_widget(Clear, popup);
     let block = Block::default()
         .borders(Borders::ALL)
         .title(" Help (Esc to close) ");
     let para = Paragraph::new(HELP_TEXT)
-        .style(Style::default().fg(Color::White))
+        .style(Style::default().fg(palette.fg))
         .block(block);
     f.render_widget(para, popup);
 }
