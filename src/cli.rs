@@ -30,4 +30,8 @@ pub struct Cli {
     /// Start the agent-native socket API server (Unix domain socket).
     #[arg(long)]
     pub api: bool,
+
+    /// Check for and install updates from GitHub releases.
+    #[arg(long)]
+    pub update: bool,
 }
