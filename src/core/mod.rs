@@ -19,3 +19,4 @@ pub mod i18n;
 pub mod uhp;
 pub mod web;
 pub mod server;
+pub mod store;

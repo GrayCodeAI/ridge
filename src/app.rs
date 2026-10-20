@@ -195,10 +195,14 @@ pub struct App {
     pub show_inbox: bool,
 
     pub task_board: crate::core::orchestration::TaskBoard,
+    /// SQLite-backed task persistence.
+    pub task_store: crate::core::store::TaskStore,
     /// Active fan-out race (each contestant works in its own worktree).
     pub race: Option<crate::core::race::Race>,
     /// Persisted race outcomes feeding the leaderboard.
     pub race_history: crate::core::race::RaceHistory,
+    /// SQLite-backed race history persistence.
+    pub race_store: crate::core::store::RaceStore,
     pub cwd: std::path::PathBuf,
 
     /// Workspace hierarchy: Workspace > Tab > Pane.
@@ -281,6 +285,12 @@ impl App {
             race: None,
             race_history: crate::core::race::RaceHistory::load(
                 &std::env::current_dir().unwrap_or_default(),
+            ),
+            task_store: crate::core::store::TaskStore::new(
+                crate::core::store::open_db().expect("open sqlite db"),
+            ),
+            race_store: crate::core::store::RaceStore::new(
+                crate::core::store::open_db().expect("open sqlite db"),
             ),
             cwd: std::env::current_dir().unwrap_or_default(),
             workspace_manager: WorkspaceManager::new(),
@@ -1043,6 +1053,21 @@ impl App {
                     forced: force,
                 });
                 let _ = self.race_history.save(&self.cwd);
+                if let Some(last) = self.race_history.records.last() {
+                    let gate_results: Vec<serde_json::Value> = last
+                        .gate_results
+                        .iter()
+                        .map(|(agent, ok)| {
+                            serde_json::json!({ "agent": agent, "gate_ok": ok })
+                        })
+                        .collect();
+                    let _ = self.race_store.insert_race(
+                        &last.prompt,
+                        last.winner_agent.as_deref(),
+                        &gate_results,
+                        last.forced,
+                    );
+                }
                 let winner = &mut self.race.as_mut().expect("race open").contestants[idx];
                 winner.winner = true;
                 winner.promoted = true;

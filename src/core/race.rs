@@ -118,6 +118,10 @@ pub struct RaceHistory {
 }
 
 impl RaceHistory {
+    pub fn new() -> Self {
+        Self { records: Vec::new() }
+    }
+
     pub fn load(repo: &std::path::Path) -> Self {
         let path = repo.join(".term-races.json");
         std::fs::read_to_string(&path)

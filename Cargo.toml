@@ -37,6 +37,9 @@ axum = { version = "0.7", features = ["ws"] }
 tokio-tungstenite = "0.21"
 futures-util = "0.3"
 
+# SQLite state store (replaces JSON file persistence)
+sled = "0.34"
+
 [profile.release]
 lto = true
 codegen-units = 1
