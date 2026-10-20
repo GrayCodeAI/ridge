@@ -34,4 +34,8 @@ pub struct Cli {
     /// Check for and install updates from GitHub releases.
     #[arg(long)]
     pub update: bool,
+
+    /// Start the UHP 1.0 agent-native socket server (Unix domain socket).
+    #[arg(long)]
+    pub uhp: bool,
 }
