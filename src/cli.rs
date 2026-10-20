@@ -43,6 +43,11 @@ pub struct Cli {
     #[arg(long)]
     pub web: bool,
 
+    /// Unix domain socket path to connect to a running `term --api` instance.
+    /// When used with --web, the dashboard shows real panes from the server.
+    #[arg(long)]
+    pub socket: Option<std::path::PathBuf>,
+
     /// Start the background server (daemon mode) for detach/reattach.
     #[arg(long)]
     pub server: bool,
