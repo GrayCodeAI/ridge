@@ -9,4 +9,5 @@ pub mod pty;
 pub mod queue;
 pub mod race;
 pub mod session;
+pub mod workspace;
 pub mod worktree;

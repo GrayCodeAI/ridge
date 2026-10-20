@@ -4,6 +4,7 @@ use crate::core::agent::{AgentRegistry, AgentStatus};
 use crate::core::inbox::Inbox;
 use crate::core::pty::PtySession;
 use crate::core::queue::Queue;
+use crate::core::workspace::{PaneRef, WorkspaceManager};
 use crate::event::{Event, EventHandler};
 use crate::ui;
 use anyhow::Result;
@@ -183,6 +184,16 @@ pub struct App {
     /// Persisted race outcomes feeding the leaderboard.
     pub race_history: crate::core::race::RaceHistory,
     pub cwd: std::path::PathBuf,
+
+    /// Workspace hierarchy: Workspace > Tab > Pane.
+    pub workspace_manager: WorkspaceManager,
+    /// Commander: bottom composer for targeted messaging to specific panes.
+    pub commander_mode: bool,
+    pub commander_draft: String,
+    pub commander_cursor: usize,
+    pub commander_targets: Vec<PaneRef>,
+    pub commander_preview: Vec<usize>,
+    pub commander_message: String,
 }
 
 impl App {
@@ -232,6 +243,13 @@ impl App {
                 &std::env::current_dir().unwrap_or_default(),
             ),
             cwd: std::env::current_dir().unwrap_or_default(),
+            workspace_manager: WorkspaceManager::new(),
+            commander_mode: false,
+            commander_draft: String::new(),
+            commander_cursor: 0,
+            commander_targets: Vec::new(),
+            commander_preview: Vec::new(),
+            commander_message: String::new(),
         };
         app.module_outputs = crate::core::modules::run_all(&app.module_state_json());
         app
@@ -582,6 +600,128 @@ impl App {
         format!("{{\"panes\":{panes},\"blocked\":{blocked},\"tasks\":{tasks}}}")
     }
 
+    // ---- Workspace management ------------------------------------------------
+
+    pub fn active_workspace(&self) -> Option<&crate::core::workspace::Workspace> {
+        self.workspace_manager.active_workspace()
+    }
+
+    pub fn active_workspace_mut(&mut self) -> Option<&mut crate::core::workspace::Workspace> {
+        self.workspace_manager.active_workspace_mut()
+    }
+
+    pub fn workspace_list(&self) -> Vec<&crate::core::workspace::Workspace> {
+        self.workspace_manager.workspaces.iter().collect()
+    }
+
+    pub fn create_workspace(&mut self, name: String, cwd: std::path::PathBuf) -> usize {
+        self.workspace_manager.create_workspace(name, cwd)
+    }
+
+    pub fn switch_workspace(&mut self, idx: usize) -> bool {
+        self.workspace_manager.switch_workspace(idx)
+    }
+
+    pub fn workspace_for_pane(&self, pane_id: usize) -> Option<usize> {
+        self.workspace_manager.workspace_for_pane(pane_id)
+    }
+
+    pub fn assign_pane_to_workspace(&mut self, pane_id: usize) {
+        if let Some(ws) = self.active_workspace_mut() {
+            ws.add_pane(pane_id);
+        }
+    }
+
+    /// Commander: open the targeted-message composer.
+    pub fn commander_open(&mut self) {
+        self.commander_mode = true;
+        self.commander_draft.clear();
+        self.commander_cursor = 0;
+        self.commander_targets.clear();
+        self.commander_preview.clear();
+        self.commander_message.clear();
+    }
+
+    /// Commander: close the composer.
+    pub fn commander_close(&mut self) {
+        self.commander_mode = false;
+        self.commander_draft.clear();
+        self.commander_targets.clear();
+        self.commander_preview.clear();
+        self.commander_message.clear();
+    }
+
+    /// Commander: set the draft text and cursor position.
+    pub fn commander_set_draft(&mut self, draft: String, cursor: usize) {
+        let len = draft.len();
+        self.commander_draft = draft;
+        self.commander_cursor = cursor.min(len);
+    }
+
+    /// Commander: add a target pane ref.
+    pub fn commander_add_target(&mut self, ref_: PaneRef) {
+        if !self.commander_targets.contains(&ref_) {
+            self.commander_targets.push(ref_);
+        }
+    }
+
+    /// Commander: remove a target pane ref.
+    pub fn commander_remove_target(&mut self, ref_: &PaneRef) {
+        self.commander_targets.retain(|t| t != ref_);
+    }
+
+    /// Commander: send the draft to all target panes.
+    pub fn commander_send(&mut self) {
+        if self.commander_draft.trim().is_empty() && self.commander_targets.is_empty() {
+            self.commander_message = "commander: nothing to send".to_string();
+            return;
+        }
+        let draft = self.commander_draft.clone();
+        let targets = self.commander_targets.clone();
+        let mut sent = 0;
+        for target in &targets {
+            if let Some(pane) = self.panes.iter_mut().find(|p| p.id == target.pane_id) {
+                if let Some(pty) = &mut pane.pty {
+                    let _ = pty.write(draft.as_bytes());
+                    let _ = pty.write(b"\r");
+                    sent += 1;
+                }
+            }
+        }
+        self.commander_message = format!("commander: sent to {sent} pane(s)");
+        self.commander_close();
+    }
+
+    /// Commander: delete a pane by stable id (used by race cleanup and normal close).
+    pub fn close_pane_by_id(&mut self, pane_id: usize) {
+        // Also remove from workspace tracking.
+        if let Some(ws_idx) = self.workspace_for_pane(pane_id) {
+            if let Some(ws) = self.workspace_manager.workspaces.get_mut(ws_idx) {
+                ws.remove_pane(pane_id);
+            }
+        }
+        // Fall through to existing close logic.
+        Self::close_pane_by_id_inner(self, pane_id);
+    }
+
+    /// Inner close logic extracted so commander close can reuse it.
+    fn close_pane_by_id_inner(&mut self, pane_id: usize) {
+        let Some(idx) = self.panes.iter().position(|p| p.id == pane_id) else {
+            return;
+        };
+        if let Some(p) = self.panes.get(idx) {
+            if let Some(pty) = &p.pty {
+                let _ = pty.write(b"\x03"); // Ctrl+C
+            }
+        }
+        self.panes.remove(idx);
+        if self.active_pane >= self.panes.len() && !self.panes.is_empty() {
+            self.active_pane = self.panes.len() - 1;
+        }
+        self.split_bottom = None;
+        self.status_message = "pane closed".to_string();
+    }
+
     pub fn spawn_agent(&mut self, agent_id: &str, cwd: std::path::PathBuf, parent: Option<usize>) {
         let agent = match self.registry.find_by_id(agent_id) {
             Some(a) => a,
@@ -609,6 +749,9 @@ impl App {
                 pane.parent_pane = parent;
                 pane.status = AgentStatus::Working;
                 self.panes.push(pane);
+                let new_id = self.panes.last().unwrap().id;
+                let agent_name = agent.name().to_string();
+                self.assign_pane_to_workspace(new_id);
                 // link to parent
                 if let Some(pid) = parent {
                     if let Some(p) = self.panes.iter_mut().find(|x| x.id == pid) {
@@ -616,7 +759,7 @@ impl App {
                     }
                 }
                 self.active_pane = self.panes.len().saturating_sub(1);
-                self.status_message = format!("spawned {} (pane {})", agent.name(), id);
+                self.status_message = format!("spawned {} (pane {})", agent_name, id);
             }
             Err(e) => {
                 self.status_message = format!("spawn failed: {e}");
@@ -638,24 +781,6 @@ impl App {
         }
         let pane_id = self.panes[self.active_pane].id;
         self.close_pane_by_id(pane_id);
-    }
-
-    /// Close a pane by its stable id (used by race cleanup and normal close).
-    pub fn close_pane_by_id(&mut self, pane_id: usize) {
-        let Some(idx) = self.panes.iter().position(|p| p.id == pane_id) else {
-            return;
-        };
-        if let Some(p) = self.panes.get(idx) {
-            if let Some(pty) = &p.pty {
-                let _ = pty.write(b"\x03"); // Ctrl+C
-            }
-        }
-        self.panes.remove(idx);
-        if self.active_pane >= self.panes.len() && !self.panes.is_empty() {
-            self.active_pane = self.panes.len() - 1;
-        }
-        self.split_bottom = None;
-        self.status_message = "pane closed".to_string();
     }
 
     // ---- Fan-out race ------------------------------------------------------
@@ -2142,8 +2267,33 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
         return;
     }
 
+    // Commander mode: targeted-message composer.
+    if app.commander_mode {
+        match key.code {
+            KeyCode::Esc => {
+                app.commander_close();
+            }
+            KeyCode::Enter => {
+                app.commander_send();
+            }
+            KeyCode::Backspace => {
+                if !app.commander_draft.is_empty() {
+                    app.commander_draft.pop();
+                    app.commander_cursor = app.commander_cursor.saturating_sub(1);
+                }
+            }
+            KeyCode::Char(c) => {
+                app.commander_draft.push(c);
+                app.commander_cursor += 1;
+            }
+            _ => {}
+        }
+        return;
+    }
+
     match (key.code, key.modifiers) {
         (KeyCode::Char('?'), _) => app.show_help = !app.show_help,
+        (KeyCode::Char('>'), _) => app.commander_open(),
         (KeyCode::Char('o'), _) => app.inbox_toggle(),
         (KeyCode::Esc, _) => {
             app.show_help = false;

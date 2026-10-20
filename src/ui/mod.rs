@@ -17,7 +17,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
         return;
     }
 
-    let extra = if app.command_mode || app.delegate_mode || app.search_mode {
+    let extra = if app.command_mode || app.delegate_mode || app.search_mode || app.commander_mode {
         1
     } else {
         0
@@ -44,6 +44,9 @@ pub fn render(f: &mut Frame, app: &mut App) {
         idx += 1;
     } else if app.search_mode {
         render_search_bar(f, app, chunks[idx]);
+        idx += 1;
+    } else if app.commander_mode {
+        render_commander_bar(f, app, chunks[idx]);
         idx += 1;
     }
     render_status(f, app, chunks[idx]);
@@ -147,6 +150,30 @@ fn render_command_bar(f: &mut Frame, app: &App, area: Rect) {
 fn render_delegate_bar(f: &mut Frame, app: &App, area: Rect) {
     let para = Paragraph::new(format!("={}", app.delegate_buffer))
         .style(Style::default().fg(Color::Green));
+    f.render_widget(para, area);
+}
+
+/// Commander bar: bottom composer for targeted messaging to specific panes.
+/// Shows `> draft [targets]` with optional status.
+fn render_commander_bar(f: &mut Frame, app: &App, area: Rect) {
+    let target_count = app.commander_targets.len();
+    let targets_str = if target_count > 0 {
+        format!(" [{target_count} target(s)]")
+    } else {
+        String::new()
+    };
+    let status = if !app.commander_message.is_empty() {
+        format!(" — {}", app.commander_message)
+    } else {
+        String::new()
+    };
+    let text = format!(
+        "> {}{}{}",
+        app.commander_draft,
+        targets_str,
+        status
+    );
+    let para = Paragraph::new(text).style(Style::default().fg(Color::Magenta));
     f.render_widget(para, area);
 }
 
@@ -721,12 +748,12 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 }
 
 const HELP_TEXT: &str = "Keybindings\n\
-  q / Ctrl+C  quit        Tab / ← →   switch tab\n\
+  q / Ctrl+C  quit        Tab / ← →   switch tab / workspace\n\
   1-7  jump to tab        n  spawn Claude     x  close pane\n\
   r  resume session       f  fork session     a  next blocked\n\
   [ ]  switch pane        o  reply inbox      j  k  scroll\n\
   n / p  next/prev hunk (Diff)\n\
-  :  command mode         =  delegate         /  search\n\
+  :  command mode         =  delegate         >  commander (targeted msg)\n\
   ?  toggle this help     Esc  close prompt/overlay\n\n\
 Commands\n\
   spawn <agent> · close · delegate <pane> <msg> · broadcast <msg>\n\
@@ -736,7 +763,9 @@ Commands\n\
   timeline [on|off <pane>] · timeline view <pane> · timeline export <file>\n\
   task add|start|done|lease|gate|merge|kanban|fanout|from-inbox|check <id> <n>\n\
   session save|clear · export costs|session · account list|add|env|show\n\
-  config show|theme · branch · help";
+  config show|theme · branch · help\n\n\
+Workspaces: create/switch with Tab/←→\n\
+Commander: > opens a bottom composer to message specific panes without focus switch.";
 
 fn render_help(f: &mut Frame, area: Rect) {
     let popup = centered_rect(66, 80, area);
