@@ -1117,8 +1117,30 @@ impl App {
                     } else {
                         self.status_message = "no saved session".to_string();
                     }
+                } else if parts.len() >= 3 && parts[1] == "fork" {
+                    // Fork an agent session from one pane to a new pane.
+                    if let Ok(src_pane) = parts[2].parse::<usize>() {
+                        let cwd = self.cwd.clone();
+                        // Collect needed info before mutable borrow.
+                        let agent_id = self.panes.iter()
+                            .find(|p| p.id == src_pane)
+                            .and_then(|p| p.agent_id.clone());
+                        let has_agent = self.panes.iter().any(|p| p.id == src_pane);
+                        if let Some(agent_id) = agent_id {
+                            if has_agent {
+                                self.spawn_agent(agent_id.as_str(), cwd, Some(src_pane));
+                                self.status_message = format!("forked {agent_id} from pane {src_pane}");
+                            } else {
+                                self.status_message = format!("pane {src_pane} has no agent");
+                            }
+                        } else {
+                            self.status_message = format!("pane {src_pane} not found");
+                        }
+                    } else {
+                        self.status_message = "usage: session fork <pane_id> [agent]".to_string();
+                    }
                 } else {
-                    self.status_message = "usage: session save | session clear".to_string();
+                    self.status_message = "usage: session save | session clear | session fork <pane> [agent]".to_string();
                 }
             }
             "close" => self.close_active_pane(),
