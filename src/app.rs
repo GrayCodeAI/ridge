@@ -5,7 +5,7 @@ use crate::core::inbox::Inbox;
 use crate::core::pty::PtySession;
 use crate::core::queue::Queue;
 use crate::core::machine::{MachineManager, MachineProfile};
-use crate::core::modules::ModuleRegistry;
+use crate::core::modules::{ModuleRegistry, WorktreeProviderRegistry};
 use crate::core::i18n::Language;
 use crate::core::workspace::{PaneRef, WorkspaceManager};
 use crate::event::{Event, EventHandler};
@@ -213,6 +213,8 @@ pub struct App {
 
     /// Module registry: actions, events, docks, bars, settings.
     pub module_registry: ModuleRegistry,
+    /// Worktree provider registry: custom worktree create/remove from modules.
+    pub worktree_provider_registry: WorktreeProviderRegistry,
 
     /// Remote machine profiles (SSH).
     pub machine_manager: MachineManager,
@@ -295,6 +297,11 @@ impl App {
             },
             machine_manager: MachineManager::new(),
             language: lang_str.parse().unwrap_or_default(),
+            worktree_provider_registry: {
+                let mut reg = WorktreeProviderRegistry::new();
+                reg.register_all();
+                reg
+            },
         };
         app.module_outputs = crate::core::modules::run_all(&app.module_state_json());
         app
@@ -1678,9 +1685,28 @@ impl App {
                         Ok(()) => self.status_message = format!("module action: {}", parts[2]),
                         Err(e) => self.status_message = format!("module action failed: {e}"),
                     }
+                } else if parts.len() >= 5 && parts[1] == "worktree" && parts[2] == "create" {
+                    let provider_id = parts[3];
+                    let branch = parts[4];
+                    let base = crate::core::worktree::worktree_base(&self.cwd);
+                    let path = base.join(branch);
+                    match self.worktree_provider_registry.run_create(provider_id, branch, &path, &base) {
+                        Ok(true) => self.status_message = format!("module worktree created: {branch}"),
+                        Ok(false) => self.status_message = format!("module worktree create rejected: {branch}"),
+                        Err(e) => self.status_message = format!("module worktree create failed: {e}"),
+                    }
+                } else if parts.len() >= 4 && parts[1] == "worktree" && parts[2] == "remove" {
+                    let provider_id = parts[3];
+                    let path = std::path::PathBuf::from(parts.get(4).unwrap_or(&""));
+                    let identity = parts.get(5).copied();
+                    match self.worktree_provider_registry.run_remove(provider_id, &path, identity) {
+                        Ok(true) => self.status_message = "module worktree removed".to_string(),
+                        Ok(false) => self.status_message = "module worktree remove rejected".to_string(),
+                        Err(e) => self.status_message = format!("module worktree remove failed: {e}"),
+                    }
                 } else {
                     self.status_message =
-                        "usage: module list | install <url> [name] | remove <name> | run <action_id>".to_string();
+                        "usage: module list | install <url> [name] | remove <name> | run <action_id> | worktree create <provider> <branch> | worktree remove <provider> <path> [identity]".to_string();
                 }
             }
             "worktree" => {
