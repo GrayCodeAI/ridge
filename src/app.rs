@@ -6,6 +6,7 @@ use crate::core::pty::PtySession;
 use crate::core::queue::Queue;
 use crate::core::machine::{MachineManager, MachineProfile};
 use crate::core::modules::ModuleRegistry;
+use crate::core::i18n::Language;
 use crate::core::workspace::{PaneRef, WorkspaceManager};
 use crate::event::{Event, EventHandler};
 use crate::ui;
@@ -215,10 +216,14 @@ pub struct App {
 
     /// Remote machine profiles (SSH).
     pub machine_manager: MachineManager,
+
+    /// Current UI language.
+    pub language: Language,
 }
 
 impl App {
     pub fn new(config: Config) -> Self {
+        let lang_str = config.language.clone();
         let mut app = Self {
             config,
             current_tab: Tab::Agents,
@@ -289,6 +294,7 @@ impl App {
                 reg
             },
             machine_manager: MachineManager::new(),
+            language: lang_str.parse().unwrap_or_default(),
         };
         app.module_outputs = crate::core::modules::run_all(&app.module_state_json());
         app
@@ -1603,6 +1609,19 @@ impl App {
                 } else {
                     self.status_message =
                         "usage: config show | theme <name> | notify on|off".to_string();
+                }
+            }
+            "language" => {
+                if parts.len() >= 2 {
+                    match parts[1].parse::<Language>() {
+                        Ok(lang) => {
+                            self.language = lang;
+                            self.status_message = format!("language: {} ({})", lang.code(), lang.name());
+                        }
+                        Err(e) => self.status_message = format!("{e}. Use: en es fr de ja zh ko ru"),
+                    }
+                } else {
+                    self.status_message = format!("current language: {} ({})", self.language.code(), self.language.name());
                 }
             }
             "module" => {

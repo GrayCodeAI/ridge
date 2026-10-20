@@ -15,3 +15,4 @@ pub mod api_server;
 pub mod update;
 pub mod clipboard_image;
 pub mod machine;
+pub mod i18n;
