@@ -61,5 +61,13 @@ async fn main() -> Result<()> {
         return crate::core::web::start_web(state, 8080).await.map_err(|e| anyhow::anyhow!(e));
     }
 
+    if cli.server {
+        return crate::core::server::start_server().map_err(|e| anyhow::anyhow!(e));
+    }
+
+    if cli.attach {
+        return crate::core::server::attach_client().map_err(|e| anyhow::anyhow!(e));
+    }
+
     app::run(config, cli).await
 }

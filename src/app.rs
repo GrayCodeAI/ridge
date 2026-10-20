@@ -2375,7 +2375,7 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
     Ok(())
 }
 
-fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
+pub(crate) fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
     use crossterm::event::{KeyCode, KeyModifiers};
 
     // Search mode.
