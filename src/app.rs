@@ -1494,7 +1494,12 @@ impl App {
             "branch" => {
                 self.status_message = crate::core::git::current_branch(&self.cwd);
             }
-            "config" => {
+            "paste" => {
+                match crate::core::clipboard_image::paste_clipboard_image(self) {
+                    Ok(()) => {}
+                    Err(e) => self.status_message = format!("paste failed: {e}"),
+                }
+            }            "config" => {
                 if parts.len() >= 2 && parts[1] == "show" {
                     match crate::config::Config::load() {
                         Ok(cfg) => match toml::to_string_pretty(&cfg) {
@@ -2379,6 +2384,15 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
                             }
                         }
                     }
+                }
+                app.copy_mode = false;
+                app.copy_selection = None;
+                app.copy_start = None;
+            }
+            KeyCode::Char('p') => {
+                match crate::core::clipboard_image::paste_clipboard_image(app) {
+                    Ok(()) => {}
+                    Err(e) => app.status_message = format!("paste failed: {e}"),
                 }
                 app.copy_mode = false;
                 app.copy_selection = None;
