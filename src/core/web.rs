@@ -12,6 +12,7 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -53,6 +54,48 @@ enum ServerMessage {
     List { panes: Vec<serde_json::Value> },
 }
 
+/// Fetch pane output from a running `term --api` instance via the Unix socket.
+fn fetch_pane_output(socket_path: &Path, pane_id: usize, cursor: usize) -> Option<(String, usize)> {
+    use std::io::{Read, Write};
+    use std::os::unix::net::UnixStream;
+
+    let mut stream = UnixStream::connect(socket_path).ok()?;
+    let request = serde_json::to_string(&serde_json::json!({
+        "cmd": "GetOutput",
+        "pane": pane_id,
+        "cursor": cursor,
+    })).ok()?;
+    stream.write_all(request.as_bytes()).ok()?;
+    let mut buf = [0u8; 65536];
+    let n = stream.read(&mut buf).ok()?;
+    let response: serde_json::Value = serde_json::from_slice(&buf[..n]).ok()?;
+    let output = response.get("output")?.as_str()?.to_string();
+    let next_cursor = response.get("next_cursor")?.as_u64()? as usize;
+    Some((output, next_cursor))
+}
+
+/// Track per-pane output cursors for polling.
+#[derive(Debug, Clone, Default)]
+pub struct PaneCursorTracker {
+    cursors: Arc<Mutex<HashMap<usize, usize>>>,
+}
+
+impl PaneCursorTracker {
+    pub fn new() -> Self {
+        Self {
+            cursors: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    pub fn get_cursor(&self, pane_id: usize) -> usize {
+        self.cursors.lock().unwrap().get(&pane_id).copied().unwrap_or(0)
+    }
+
+    pub fn set_cursor(&self, pane_id: usize, cursor: usize) {
+        self.cursors.lock().unwrap().insert(pane_id, cursor);
+    }
+}
+
 /// Web server state shared across connections.
 #[derive(Debug, Clone)]
 pub struct WebState {
@@ -61,6 +104,8 @@ pub struct WebState {
     output_tx: broadcast::Sender<(usize, String)>,
     /// Optional socket path to connect to a running `term --api` instance.
     socket_path: Option<PathBuf>,
+    /// Per-pane output cursors for polling PTY output.
+    cursor_tracker: Arc<PaneCursorTracker>,
 }
 
 impl WebState {
@@ -70,6 +115,7 @@ impl WebState {
             panes: Arc::new(Mutex::new(Vec::new())),
             output_tx,
             socket_path: None,
+            cursor_tracker: Arc::new(PaneCursorTracker::new()),
         }
     }
 
@@ -79,6 +125,7 @@ impl WebState {
             panes: Arc::new(Mutex::new(Vec::new())),
             output_tx,
             socket_path: Some(socket_path),
+            cursor_tracker: Arc::new(PaneCursorTracker::new()),
         }
     }
 
@@ -96,6 +143,10 @@ impl WebState {
 
     pub fn socket_path(&self) -> Option<&PathBuf> {
         self.socket_path.as_ref()
+    }
+
+    pub fn cursor_tracker(&self) -> Arc<PaneCursorTracker> {
+        self.cursor_tracker.clone()
     }
 }
 
@@ -134,6 +185,18 @@ async fn poll_api_socket(state: Arc<WebState>, socket_path: PathBuf, poll_interv
                 let status = pane.get("status").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
                 let msg = serde_json::to_string(&ServerMessage::State { pane_id, title, agent, status }).unwrap_or_default();
                 let _ = state.output_tx().send((pane_id, msg));
+
+                // Poll for PTY output from this pane
+                let cursor = state.cursor_tracker().get_cursor(pane_id);
+                if let Some((output, next_cursor)) = fetch_pane_output(&socket_path, pane_id, cursor) {
+                    if !output.is_empty() {
+                        let _ = state.output_tx().send((
+                            pane_id,
+                            serde_json::to_string(&ServerMessage::Output { pane_id, output }).unwrap_or_default(),
+                        ));
+                    }
+                    state.cursor_tracker().set_cursor(pane_id, next_cursor);
+                }
             }
         }
     }
