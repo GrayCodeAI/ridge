@@ -4,6 +4,7 @@ use crate::core::agent::{AgentRegistry, AgentStatus};
 use crate::core::inbox::Inbox;
 use crate::core::pty::PtySession;
 use crate::core::queue::Queue;
+use crate::core::machine::{MachineManager, MachineProfile};
 use crate::core::modules::ModuleRegistry;
 use crate::core::workspace::{PaneRef, WorkspaceManager};
 use crate::event::{Event, EventHandler};
@@ -211,6 +212,9 @@ pub struct App {
 
     /// Module registry: actions, events, docks, bars, settings.
     pub module_registry: ModuleRegistry,
+
+    /// Remote machine profiles (SSH).
+    pub machine_manager: MachineManager,
 }
 
 impl App {
@@ -284,6 +288,7 @@ impl App {
                 reg.register_all();
                 reg
             },
+            machine_manager: MachineManager::new(),
         };
         app.module_outputs = crate::core::modules::run_all(&app.module_state_json());
         app
@@ -1521,7 +1526,53 @@ impl App {
                     Ok(()) => {}
                     Err(e) => self.status_message = format!("paste failed: {e}"),
                 }
-            }            "config" => {
+            }
+            "machine" => {
+                if parts.len() >= 2 && parts[1] == "list" {
+                    let machines = self.machine_manager.list_machines();
+                    if machines.is_empty() {
+                        self.status_message = "machines: none".to_string();
+                    } else {
+                        let mut msg = String::from("machines:\n");
+                        for m in machines {
+                            let active = if self.machine_manager.active_machine.as_deref() == Some(&m.id) {
+                                " (active)"
+                            } else {
+                                ""
+                            };
+                            msg.push_str(&format!("  {} {}@{} (port {}){}\n", m.id, m.user, m.host, m.port, active));
+                        }
+                        self.status_message = msg;
+                    }
+                } else if parts.len() >= 7 && parts[1] == "add" {
+                    let profile = MachineProfile {
+                        id: parts[2].to_string(),
+                        name: parts[3].to_string(),
+                        host: parts[4].to_string(),
+                        port: parts[5].parse().unwrap_or(22),
+                        user: parts[6].to_string(),
+                        ssh_key: None,
+                        session: None,
+                    };
+                    self.machine_manager.add_machine(profile);
+                    self.status_message = format!("machine added: {}", parts[2]);
+                } else if parts.len() >= 3 && parts[1] == "use" {
+                    if self.machine_manager.set_active(parts[2]) {
+                        self.status_message = format!("active machine: {}", parts[2]);
+                    } else {
+                        self.status_message = format!("machine not found: {}", parts[2]);
+                    }
+                } else if parts.len() >= 3 && parts[1] == "ssh" {
+                    if let Some(cmd) = self.machine_manager.ssh_command(parts[2]) {
+                        self.status_message = format!("ssh: {cmd}");
+                    } else {
+                        self.status_message = format!("machine not found: {}", parts[2]);
+                    }
+                } else {
+                    self.status_message = "usage: machine list | add <id> <name> <host> <port> <user> | use <id> | ssh <id>".to_string();
+                }
+            }
+            "config" => {
                 if parts.len() >= 2 && parts[1] == "show" {
                     match crate::config::Config::load() {
                         Ok(cfg) => match toml::to_string_pretty(&cfg) {
