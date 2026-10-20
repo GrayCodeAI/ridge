@@ -42,4 +42,12 @@ pub struct Cli {
     /// Start the Luvus Web browser client (HTTP + WebSocket).
     #[arg(long)]
     pub web: bool,
+
+    /// Start the background server (daemon mode) for detach/reattach.
+    #[arg(long)]
+    pub server: bool,
+
+    /// Attach to a running background server as a TUI client.
+    #[arg(long)]
+    pub attach: bool,
 }
