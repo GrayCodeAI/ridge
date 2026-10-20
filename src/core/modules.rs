@@ -467,7 +467,7 @@ mod tests {
 
     #[test]
     fn platform_filter_linux() {
-        let hook = StartupHook {
+        let _hook = StartupHook {
             command: vec!["true".to_string()],
             platforms: Some(vec!["linux".to_string()]),
         };

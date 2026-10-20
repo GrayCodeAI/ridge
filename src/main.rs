@@ -57,8 +57,11 @@ async fn main() -> Result<()> {
     }
 
     if cli.web {
-        let state = Arc::new(crate::core::web::WebState::new());
-        return crate::core::web::start_web(state, 8080).await.map_err(|e| anyhow::anyhow!(e));
+        let state = match &cli.socket {
+            Some(sp) => Arc::new(crate::core::web::WebState::new_with_socket(sp.clone())),
+            None => Arc::new(crate::core::web::WebState::new()),
+        };
+        return crate::core::web::start_web(state, 8080, cli.socket.clone()).await.map_err(|e| anyhow::anyhow!(e));
     }
 
     if cli.server {
