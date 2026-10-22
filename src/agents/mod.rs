@@ -30,7 +30,8 @@ mod detect_tests {
         };
 
         // (detect function, matching process name, matching cmdline)
-        let cases: Vec<(Box<dyn Fn(&str, &str) -> bool>, &str, &str)> = vec![
+        type Case<'a> = (Box<dyn Fn(&str, &str) -> bool>, &'a str, &'a str);
+        let cases: Vec<Case> = vec![
             (
                 Box::new(|p, c| ClaudeAgent.detect(p, c)),
                 "claude",

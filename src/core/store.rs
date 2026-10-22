@@ -14,6 +14,18 @@ pub fn db_path() -> PathBuf {
     crate::config::data_dir().join("term.db")
 }
 
+fn open_db_at(path: PathBuf) -> StoreResult<Db> {
+    let db = sled::open(&path).map_err(|e| e.to_string())?;
+    let _ = db.open_tree("tasks").map_err(|e| e.to_string())?;
+    let _ = db.open_tree("race_history").map_err(|e| e.to_string())?;
+    let _ = db.open_tree("meta").map_err(|e| e.to_string())?;
+    let meta = db.open_tree("meta").map_err(|e| e.to_string())?;
+    let _ = meta.insert(b"schema_version", b"2");
+    drop(meta);
+    Ok(db)
+}
+
+#[cfg(not(test))]
 pub fn open_db() -> StoreResult<Db> {
     let path = db_path();
     if let Some(parent) = path.parent() {
@@ -23,7 +35,7 @@ pub fn open_db() -> StoreResult<Db> {
         Ok(db) => db,
         Err(_) => {
             // Fall back to temp dir with unique name per call
-            // (avoids sled lock conflicts when running tests in parallel)
+            // (avoids sled lock conflicts when running multiple instances)
             let tmp_path = std::env::temp_dir().join(format!(
                 "term-{}-{}.db",
                 std::process::id(),
@@ -39,6 +51,20 @@ pub fn open_db() -> StoreResult<Db> {
     let _ = meta.insert(b"schema_version", b"2");
     drop(meta);
     Ok(db)
+}
+
+// Tests must never touch the user's real state store: a shared database makes
+// results depend on leftover rows from earlier runs and on which test happens
+// to open the file first. A unique temp path per call keeps every test
+// isolated and parallel-safe.
+#[cfg(test)]
+pub fn open_db() -> StoreResult<Db> {
+    let path = std::env::temp_dir().join(format!(
+        "term-test-{}-{}.db",
+        std::process::id(),
+        DB_COUNTER.fetch_add(1, Ordering::Relaxed)
+    ));
+    open_db_at(path)
 }
 
 pub struct TaskStore {
@@ -83,7 +109,11 @@ impl TaskStore {
             let task: Value = serde_json::from_slice(&value).map_err(|e| e.to_string())?;
             tasks.push(TaskRow {
                 id: task.get("id").and_then(|v| v.as_u64()).unwrap_or(0),
-                title: task.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                title: task
+                    .get("title")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
                 status: task
                     .get("status")
                     .and_then(|v| v.as_str())
@@ -94,7 +124,10 @@ impl TaskStore {
                     .and_then(|v| v.as_array())
                     .map(|arr| arr.iter().filter_map(|v| v.as_u64()).collect())
                     .unwrap_or_default(),
-                pane_id: task.get("pane_id").and_then(|v| v.as_u64()).map(|v| v as usize),
+                pane_id: task
+                    .get("pane_id")
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as usize),
             });
         }
         Ok(tasks)
@@ -108,8 +141,7 @@ impl TaskStore {
     ) -> StoreResult<()> {
         let key = id.to_string().into_bytes();
         if let Some(existing) = self.tasks.get(&key).map_err(|e| e.to_string())? {
-            let mut task: Value =
-                serde_json::from_slice(&existing).map_err(|e| e.to_string())?;
+            let mut task: Value = serde_json::from_slice(&existing).map_err(|e| e.to_string())?;
             if let Some(obj) = task.as_object_mut() {
                 obj.insert("status".to_string(), Value::String(status.to_string()));
                 obj.insert(
@@ -143,7 +175,9 @@ pub struct RaceStore {
 
 impl RaceStore {
     pub fn new(db: Db) -> Self {
-        let races = db.open_tree("race_history").expect("open race_history tree");
+        let races = db
+            .open_tree("race_history")
+            .expect("open race_history tree");
         Self { db, races }
     }
 
@@ -215,7 +249,10 @@ impl RaceStore {
                     .and_then(|v| v.as_array())
                     .cloned()
                     .unwrap_or_default(),
-                forced: record.get("forced").and_then(|v| v.as_bool()).unwrap_or(false),
+                forced: record
+                    .get("forced")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false),
             });
         }
         races.sort_by(|a, b| b.id.cmp(&a.id));
@@ -230,8 +267,14 @@ impl RaceStore {
             .map(|(k, v)| (k.to_vec(), v.to_vec()))
             .collect();
         all.sort_by(|a, b| {
-            let id_a: u64 = std::str::from_utf8(&a.0).unwrap_or("0").parse().unwrap_or(0);
-            let id_b: u64 = std::str::from_utf8(&b.0).unwrap_or("0").parse().unwrap_or(0);
+            let id_a: u64 = std::str::from_utf8(&a.0)
+                .unwrap_or("0")
+                .parse()
+                .unwrap_or(0);
+            let id_b: u64 = std::str::from_utf8(&b.0)
+                .unwrap_or("0")
+                .parse()
+                .unwrap_or(0);
             id_a.cmp(&id_b)
         });
         if all.len() <= max {
@@ -273,12 +316,16 @@ mod tests {
         let db = open_db().expect("open db");
         let store = TaskStore::new(db);
 
-        store.insert_task(1, "test task", "pending", &[], None).expect("insert");
+        store
+            .insert_task(1, "test task", "pending", &[], None)
+            .expect("insert");
         let tasks = store.load_all_tasks().expect("load");
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].title, "test task");
 
-        store.update_task_status(1, "done", Some(3)).expect("update");
+        store
+            .update_task_status(1, "done", Some(3))
+            .expect("update");
         let tasks = store.load_all_tasks().expect("load");
         assert_eq!(tasks[0].status, "done");
         assert_eq!(tasks[0].pane_id, Some(3));
@@ -294,7 +341,9 @@ mod tests {
         let store = RaceStore::new(db);
 
         for i in 1..=10 {
-            store.insert_race(&format!("prompt {i}"), Some("claude"), &[], false).expect("insert");
+            store
+                .insert_race(&format!("prompt {i}"), Some("claude"), &[], false)
+                .expect("insert");
         }
         assert_eq!(store.cap_races(5).expect("cap"), 5);
         let races = store.load_all_races().expect("load");

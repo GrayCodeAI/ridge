@@ -8,13 +8,15 @@
 //!   - get_status    → get app/dashboard state as JSON
 //!   - close_pane    → close a pane by id
 
-use std::io::{Read, Write};
-use std::os::unix::net::{UnixListener, UnixStream};
-use std::sync::{Arc, Mutex};
-use std::thread;
-
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+#[cfg(unix)]
+use std::io::{Read, Write};
+#[cfg(unix)]
+use std::os::unix::net::{UnixListener, UnixStream};
+use std::sync::{Arc, Mutex};
+#[cfg(unix)]
+use std::thread;
 
 /// Socket path under the term data dir.
 pub fn socket_path() -> std::path::PathBuf {
@@ -129,10 +131,8 @@ fn handle_command(app: &Arc<Mutex<crate::app::App>>, cmd: ApiCommand) -> ApiResp
 }
 
 /// Read one JSON command from a stream, respond with JSON.
-fn handle_stream(
-    app: &Arc<Mutex<crate::app::App>>,
-    mut stream: UnixStream,
-) -> std::io::Result<()> {
+#[cfg(unix)]
+fn handle_stream(app: &Arc<Mutex<crate::app::App>>, mut stream: UnixStream) -> std::io::Result<()> {
     let mut buf = [0u8; 65536];
     let n = stream.read(&mut buf)?;
     if n == 0 {
@@ -151,6 +151,7 @@ fn handle_stream(
 }
 
 /// Start the socket API server. Runs forever in the calling thread.
+#[cfg(unix)]
 pub fn start_server(app: Arc<Mutex<crate::app::App>>) -> std::io::Result<()> {
     let path = socket_path();
     if let Some(parent) = path.parent() {
@@ -166,6 +167,16 @@ pub fn start_server(app: Arc<Mutex<crate::app::App>>) -> std::io::Result<()> {
             let _ = handle_stream(&app, stream);
         });
     }
+}
+
+/// Unix-domain sockets are not available on Windows; report the unsupported
+/// flag instead of failing to compile.
+#[cfg(not(unix))]
+pub fn start_server(_app: Arc<Mutex<crate::app::App>>) -> std::io::Result<()> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "term --api requires Unix-domain sockets (not available on Windows)",
+    ))
 }
 
 #[cfg(test)]

@@ -34,9 +34,7 @@ async fn main() -> Result<()> {
     let config = config::Config::load()?;
 
     if cli.api {
-        let app = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::app::App::new(config),
-        ));
+        let app = std::sync::Arc::new(std::sync::Mutex::new(crate::app::App::new(config)));
         crate::core::api_server::start_server(app)?;
         return Ok(());
     }
@@ -61,15 +59,26 @@ async fn main() -> Result<()> {
             Some(sp) => Arc::new(crate::core::web::WebState::new_with_socket(sp.clone())),
             None => Arc::new(crate::core::web::WebState::new()),
         };
-        return crate::core::web::start_web(state, 8080, cli.socket.clone()).await.map_err(|e| anyhow::anyhow!(e));
+        return crate::core::web::start_web(state, 8080, cli.socket.clone())
+            .await
+            .map_err(|e| anyhow::anyhow!(e));
     }
 
+    #[cfg(unix)]
     if cli.server {
         return crate::core::server::start_server().map_err(|e| anyhow::anyhow!(e));
     }
 
+    #[cfg(unix)]
     if cli.attach {
         return crate::core::server::attach_client().map_err(|e| anyhow::anyhow!(e));
+    }
+
+    #[cfg(not(unix))]
+    if cli.server || cli.attach {
+        anyhow::bail!(
+            "--server and --attach require Unix-domain sockets (not available on Windows)"
+        );
     }
 
     app::run(config, cli).await

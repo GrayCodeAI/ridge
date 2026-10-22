@@ -293,7 +293,9 @@ pub fn run_worktree_create(
         std::io::Write::write_all(&mut stdin, req_json.as_bytes())
             .map_err(|e| format!("write request: {e}"))?;
     }
-    let output = child.wait_with_output().map_err(|e| format!("wait provider: {e}"))?;
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("wait provider: {e}"))?;
     if !output.status.success() {
         return Err(format!(
             "worktree create provider failed: {}",
@@ -335,7 +337,9 @@ pub fn run_worktree_remove(
         std::io::Write::write_all(&mut stdin, req_json.as_bytes())
             .map_err(|e| format!("write request: {e}"))?;
     }
-    let output = child.wait_with_output().map_err(|e| format!("wait provider: {e}"))?;
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("wait provider: {e}"))?;
     if !output.status.success() {
         return Err(format!(
             "worktree remove provider failed: {}",
@@ -467,12 +471,14 @@ mod tests {
 
     #[test]
     fn platform_filter_linux() {
-        let _hook = StartupHook {
-            command: vec!["true".to_string()],
-            platforms: Some(vec!["linux".to_string()]),
-        };
-        assert!(hook_platform_ok(&Some(vec!["linux".to_string()])));
-        assert!(!hook_platform_ok(&Some(vec!["windows".to_string()])));
+        assert_eq!(
+            hook_platform_ok(&Some(vec!["linux".to_string()])),
+            cfg!(target_os = "linux")
+        );
+        assert_eq!(
+            hook_platform_ok(&Some(vec!["windows".to_string()])),
+            cfg!(target_os = "windows")
+        );
     }
 
     #[test]
@@ -488,6 +494,11 @@ mod tests {
         let mut reg = WorktreeProviderRegistry::new();
         reg.register_all();
         // Should not panic even with no providers installed.
-        let _ = reg.run_create("nonexistent", "branch", Path::new("/tmp"), Path::new("/tmp"));
+        let _ = reg.run_create(
+            "nonexistent",
+            "branch",
+            Path::new("/tmp"),
+            Path::new("/tmp"),
+        );
     }
 }

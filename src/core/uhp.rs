@@ -5,6 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+#[cfg(unix)]
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
@@ -49,7 +50,8 @@ pub struct UhpcEvent {
 }
 
 /// Method handler type.
-type MethodHandler = Arc<dyn Fn(Option<serde_json::Value>) -> Result<serde_json::Value, UhpcError> + Send + Sync>;
+type MethodHandler =
+    Arc<dyn Fn(Option<serde_json::Value>) -> Result<serde_json::Value, UhpcError> + Send + Sync>;
 
 /// Boxed event handler.
 type EventHandler = Box<dyn Fn(&UhpcEvent) + Send + Sync>;
@@ -70,7 +72,10 @@ impl UhpcRegistry {
     /// Register a method handler.
     pub fn register<F>(&mut self, name: &str, handler: F)
     where
-        F: Fn(Option<serde_json::Value>) -> Result<serde_json::Value, UhpcError> + Send + Sync + 'static,
+        F: Fn(Option<serde_json::Value>) -> Result<serde_json::Value, UhpcError>
+            + Send
+            + Sync
+            + 'static,
     {
         self.methods.insert(name.to_string(), Arc::new(handler));
     }
@@ -82,7 +87,10 @@ impl UhpcRegistry {
     {
         let id = self.next_event_id;
         self.next_event_id += 1;
-        self.events.entry(event.to_string()).or_default().push(Box::new(handler));
+        self.events
+            .entry(event.to_string())
+            .or_default()
+            .push(Box::new(handler));
         id
     }
 
@@ -147,6 +155,7 @@ impl UhpcServer {
     }
 
     /// Start the UHP server. Runs forever in the calling thread.
+    #[cfg(unix)]
     pub fn start(self) -> std::io::Result<()> {
         let path = &self.socket_path;
         if let Some(parent) = path.parent() {
@@ -165,9 +174,8 @@ impl UhpcServer {
                     Ok(n) if n > 0 => {
                         if let Ok(call) = serde_json::from_slice::<UhpcMethodCall>(&buf[..n]) {
                             let response = registry.lock().unwrap().handle_call(call);
-                            let _ = stream.write_all(
-                                &serde_json::to_vec(&response).unwrap_or_default(),
-                            );
+                            let _ = stream
+                                .write_all(&serde_json::to_vec(&response).unwrap_or_default());
                         }
                     }
                     _ => {}
@@ -175,6 +183,16 @@ impl UhpcServer {
             });
         }
         Ok(())
+    }
+
+    /// Unix-domain sockets are not available on Windows; report the unsupported
+    /// flag instead of failing to compile.
+    #[cfg(not(unix))]
+    pub fn start(self) -> std::io::Result<()> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "term --uhp requires Unix-domain sockets (not available on Windows)",
+        ))
     }
 }
 
@@ -198,7 +216,9 @@ mod tests {
     #[test]
     fn registry_register_and_call() {
         let mut reg = UhpcRegistry::new();
-        reg.register("echo", |params| Ok(params.unwrap_or(serde_json::json!(null))));
+        reg.register("echo", |params| {
+            Ok(params.unwrap_or(serde_json::json!(null)))
+        });
 
         let call = UhpcMethodCall {
             jsonrpc: UHP_VERSION.to_string(),
@@ -248,9 +268,6 @@ mod tests {
             event: "test_event".to_string(),
             params: None,
         });
-        assert_eq!(
-            *received.lock().unwrap(),
-            Some("test_event".to_string())
-        );
+        assert_eq!(*received.lock().unwrap(), Some("test_event".to_string()));
     }
 }

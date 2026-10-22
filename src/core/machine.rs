@@ -109,7 +109,8 @@ impl MachineManager {
             cmd.arg("-i").arg(key);
         }
         if let Some(session) = &profile.session {
-            cmd.arg("-t").arg(format!("term --attach-session {session}"));
+            cmd.arg("-t")
+                .arg(format!("term --attach-session {session}"));
         }
 
         let status = cmd.status().map_err(|e| e.to_string())?;
