@@ -495,9 +495,9 @@ mod checklist_tests {
     fn check_toggle_flips_and_validates() {
         let mut b = TaskBoard::default();
         let id = b.add_from_reply("agent", "p", "- one\n- two");
-        assert_eq!(b.check_toggle(id, 1).unwrap(), true);
-        assert_eq!(b.check_toggle(id, 1).unwrap(), false);
-        assert_eq!(b.check_toggle(id, 2).unwrap(), true);
+        assert!(b.check_toggle(id, 1).unwrap());
+        assert!(!b.check_toggle(id, 1).unwrap());
+        assert!(b.check_toggle(id, 2).unwrap());
         assert!(b.check_toggle(999, 1).is_err());
         assert!(b.check_toggle(id, 3).is_err());
         // render shows the marks

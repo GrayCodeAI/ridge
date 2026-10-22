@@ -84,6 +84,12 @@ pub fn gh_issues(cwd: &Path) -> String {
     }
 }
 
+/// Recent commit history with ASCII graph arrows (git log --graph --oneline).
+pub fn log_graph(cwd: &Path, n: usize) -> String {
+    let n = format!("-{n}");
+    run_git(cwd, &["log", "--graph", "--oneline", "--all", &n])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -129,10 +135,4 @@ mod tests {
         let _ = branches(&dir);
         let _ = std::fs::remove_dir_all(&dir);
     }
-}
-
-/// Recent commit history with ASCII graph arrows (git log --graph --oneline).
-pub fn log_graph(cwd: &Path, n: usize) -> String {
-    let n = format!("-{n}");
-    run_git(cwd, &["log", "--graph", "--oneline", "--all", &n])
 }

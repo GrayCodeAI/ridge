@@ -47,12 +47,18 @@ pub fn sound_command() -> Option<(String, Vec<String>)> {
     #[cfg(target_os = "linux")]
     {
         // paplay is standard on PulseAudio/PipeWire systems.
-        Some(("paplay".to_string(), vec!["/usr/share/sounds/freedesktop/stereo/complete.oga".to_string()]))
+        Some((
+            "paplay".to_string(),
+            vec!["/usr/share/sounds/freedesktop/stereo/complete.oga".to_string()],
+        ))
     }
     #[cfg(target_os = "macos")]
     {
         // afplay plays the system default sound.
-        Some(("afplay".to_string(), vec!["/System/Library/Sounds/Pop.aiff".to_string()]))
+        Some((
+            "afplay".to_string(),
+            vec!["/System/Library/Sounds/Pop.aiff".to_string()],
+        ))
     }
     #[cfg(target_os = "windows")]
     {

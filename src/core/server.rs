@@ -93,11 +93,9 @@ pub fn start_server() -> std::io::Result<()> {
     }
     let _ = std::fs::remove_file(&path);
 
-    let app = Arc::new(Mutex::new(
-        crate::app::App::new(crate::config::Config::load().map_err(|e| {
-            std::io::Error::other(e.to_string())
-        })?),
-    ));
+    let app = Arc::new(Mutex::new(crate::app::App::new(
+        crate::config::Config::load().map_err(|e| std::io::Error::other(e.to_string()))?,
+    )));
     let listener = UnixListener::bind(&path)?;
     eprintln!("term server: {}", path.display());
 
@@ -140,9 +138,7 @@ fn handle_client(stream: &mut UnixStream, app: Arc<Mutex<crate::app::App>>) {
             status_message: app.status_message.clone(),
             current_tab: app.current_tab.title().to_string(),
         };
-        let _ = stream.write_all(
-            &serde_json::to_vec(&msg).unwrap_or_default(),
-        );
+        let _ = stream.write_all(&serde_json::to_vec(&msg).unwrap_or_default());
     }
 
     loop {
@@ -182,9 +178,7 @@ fn handle_client(stream: &mut UnixStream, app: Arc<Mutex<crate::app::App>>) {
                         status_message: app.status_message.clone(),
                         current_tab: app.current_tab.title().to_string(),
                     };
-                    let _ = stream.write_all(
-                        &serde_json::to_vec(&msg).unwrap_or_default(),
-                    );
+                    let _ = stream.write_all(&serde_json::to_vec(&msg).unwrap_or_default());
                 }
             }
             Err(_) => break,

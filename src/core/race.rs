@@ -119,7 +119,9 @@ pub struct RaceHistory {
 
 impl RaceHistory {
     pub fn new() -> Self {
-        Self { records: Vec::new() }
+        Self {
+            records: Vec::new(),
+        }
     }
 
     pub fn load(repo: &std::path::Path) -> Self {
@@ -176,7 +178,6 @@ impl RaceHistory {
 #[cfg(test)]
 mod history_tests {
     use super::*;
-    use std::path::PathBuf;
 
     fn rec(winner: Option<&str>) -> RaceRecord {
         RaceRecord {
@@ -227,7 +228,7 @@ mod history_tests {
         assert_eq!(h2.records.len(), 1);
         assert_eq!(h2.records[0].winner_agent.as_deref(), Some("opencode"));
         let path = dir.join(".term-races.json");
-        assert_eq!(path, PathBuf::from(dir.join(".term-races.json")));
+        assert_eq!(path, dir.join(".term-races.json"));
         assert!(path.exists());
         let _ = std::fs::remove_dir_all(&dir);
     }

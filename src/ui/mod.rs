@@ -2,8 +2,8 @@ use crate::app::{App, Tab};
 use crate::core::agent::AgentStatus;
 use ratatui::{
     Frame,
-    style::{Color, Modifier, Style},
     layout::{Constraint, Direction, Layout, Rect},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Tabs},
 };
@@ -17,7 +17,12 @@ pub fn render(f: &mut Frame, app: &mut App) {
         return;
     }
 
-    let extra = if app.command_mode || app.delegate_mode || app.search_mode || app.commander_mode || app.pane_search_mode {
+    let extra = if app.command_mode
+        || app.delegate_mode
+        || app.search_mode
+        || app.commander_mode
+        || app.pane_search_mode
+    {
         1
     } else {
         0
@@ -175,12 +180,7 @@ fn render_commander_bar(f: &mut Frame, app: &App, area: Rect) {
     } else {
         String::new()
     };
-    let text = format!(
-        "> {}{}{}",
-        app.commander_draft,
-        targets_str,
-        status
-    );
+    let text = format!("> {}{}{}", app.commander_draft, targets_str, status);
     let para = Paragraph::new(text).style(Style::default().fg(palette.accent));
     f.render_widget(para, area);
 }
@@ -324,7 +324,11 @@ fn render_tabs(f: &mut Frame, app: &App, area: Rect) {
         .block(Block::default().borders(Borders::ALL).title(" Term "))
         .select(selected)
         .style(Style::default().fg(palette.fg))
-        .highlight_style(Style::default().fg(palette.accent).add_modifier(Modifier::BOLD));
+        .highlight_style(
+            Style::default()
+                .fg(palette.accent)
+                .add_modifier(Modifier::BOLD),
+        );
     f.render_widget(tabs, area);
 }
 
@@ -459,7 +463,9 @@ fn render_terminal_for(f: &mut Frame, app: &App, area: Rect, pane_idx: usize) {
                         spans.push(Span::raw(before));
                         spans.push(Span::styled(
                             matched,
-                            Style::default().fg(palette.warning).add_modifier(Modifier::BOLD),
+                            Style::default()
+                                .fg(palette.warning)
+                                .add_modifier(Modifier::BOLD),
                         ));
                         remaining = rest;
                     }
@@ -484,7 +490,10 @@ fn render_terminal_for(f: &mut Frame, app: &App, area: Rect, pane_idx: usize) {
                         });
                         let is_cursor = row == cursor.0 && col == cursor.1;
                         let style = if is_cursor {
-                            Style::default().bg(palette.warning).fg(palette.bg).add_modifier(Modifier::BOLD)
+                            Style::default()
+                                .bg(palette.warning)
+                                .fg(palette.bg)
+                                .add_modifier(Modifier::BOLD)
                         } else if in_sel {
                             Style::default().bg(palette.accent).fg(palette.bg)
                         } else {
@@ -502,8 +511,7 @@ fn render_terminal_for(f: &mut Frame, app: &App, area: Rect, pane_idx: usize) {
                 f.render_widget(para, main_inner);
             }
         } else {
-            let p = Paragraph::new("No PTY attached.")
-                .style(Style::default().fg(palette.muted));
+            let p = Paragraph::new("No PTY attached.").style(Style::default().fg(palette.muted));
             f.render_widget(p, main_inner);
         }
     } else {

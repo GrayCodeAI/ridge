@@ -75,7 +75,11 @@ pub fn paste_clipboard_image(app: &mut crate::app::App) -> Result<(), String> {
     if let Some(pane) = app.panes.get_mut(pane_idx) {
         if let Some(pty) = &mut pane.pty {
             // Notify the agent that an image was pasted (file path).
-            let msg = format!("\r\n[image pasted: {} ({} bytes)]\r\n", path.display(), data.len());
+            let msg = format!(
+                "\r\n[image pasted: {} ({} bytes)]\r\n",
+                path.display(),
+                data.len()
+            );
             let _ = pty.write(msg.as_bytes());
             app.status_message = format!("image pasted: {} ({} bytes)", path.display(), data.len());
         }

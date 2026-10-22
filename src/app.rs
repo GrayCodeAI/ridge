@@ -1,12 +1,12 @@
 use crate::cli::Cli;
 use crate::config::Config;
 use crate::core::agent::{AgentRegistry, AgentStatus};
+use crate::core::i18n::Language;
 use crate::core::inbox::Inbox;
-use crate::core::pty::PtySession;
-use crate::core::queue::Queue;
 use crate::core::machine::{MachineManager, MachineProfile};
 use crate::core::modules::{ModuleRegistry, WorktreeProviderRegistry};
-use crate::core::i18n::Language;
+use crate::core::pty::PtySession;
+use crate::core::queue::Queue;
 use crate::core::workspace::{PaneRef, WorkspaceManager};
 use crate::event::{Event, EventHandler};
 use crate::ui;
@@ -1057,9 +1057,7 @@ impl App {
                     let gate_results: Vec<serde_json::Value> = last
                         .gate_results
                         .iter()
-                        .map(|(agent, ok)| {
-                            serde_json::json!({ "agent": agent, "gate_ok": ok })
-                        })
+                        .map(|(agent, ok)| serde_json::json!({ "agent": agent, "gate_ok": ok }))
                         .collect();
                     let _ = self.race_store.insert_race(
                         &last.prompt,
@@ -1165,14 +1163,17 @@ impl App {
                     if let Ok(src_pane) = parts[2].parse::<usize>() {
                         let cwd = self.cwd.clone();
                         // Collect needed info before mutable borrow.
-                        let agent_id = self.panes.iter()
+                        let agent_id = self
+                            .panes
+                            .iter()
                             .find(|p| p.id == src_pane)
                             .and_then(|p| p.agent_id.clone());
                         let has_agent = self.panes.iter().any(|p| p.id == src_pane);
                         if let Some(agent_id) = agent_id {
                             if has_agent {
                                 self.spawn_agent(agent_id.as_str(), cwd, Some(src_pane));
-                                self.status_message = format!("forked {agent_id} from pane {src_pane}");
+                                self.status_message =
+                                    format!("forked {agent_id} from pane {src_pane}");
                             } else {
                                 self.status_message = format!("pane {src_pane} has no agent");
                             }
@@ -1183,7 +1184,9 @@ impl App {
                         self.status_message = "usage: session fork <pane_id> [agent]".to_string();
                     }
                 } else {
-                    self.status_message = "usage: session save | session clear | session fork <pane> [agent]".to_string();
+                    self.status_message =
+                        "usage: session save | session clear | session fork <pane> [agent]"
+                            .to_string();
                 }
             }
             "close" => self.close_active_pane(),
@@ -1559,12 +1562,10 @@ impl App {
             "branch" => {
                 self.status_message = crate::core::git::current_branch(&self.cwd);
             }
-            "paste" => {
-                match crate::core::clipboard_image::paste_clipboard_image(self) {
-                    Ok(()) => {}
-                    Err(e) => self.status_message = format!("paste failed: {e}"),
-                }
-            }
+            "paste" => match crate::core::clipboard_image::paste_clipboard_image(self) {
+                Ok(()) => {}
+                Err(e) => self.status_message = format!("paste failed: {e}"),
+            },
             "machine" => {
                 if parts.len() >= 2 && parts[1] == "list" {
                     let machines = self.machine_manager.list_machines();
@@ -1573,12 +1574,16 @@ impl App {
                     } else {
                         let mut msg = String::from("machines:\n");
                         for m in machines {
-                            let active = if self.machine_manager.active_machine.as_deref() == Some(&m.id) {
-                                " (active)"
-                            } else {
-                                ""
-                            };
-                            msg.push_str(&format!("  {} {}@{} (port {}){}\n", m.id, m.user, m.host, m.port, active));
+                            let active =
+                                if self.machine_manager.active_machine.as_deref() == Some(&m.id) {
+                                    " (active)"
+                                } else {
+                                    ""
+                                };
+                            msg.push_str(&format!(
+                                "  {} {}@{} (port {}){}\n",
+                                m.id, m.user, m.host, m.port, active
+                            ));
                         }
                         self.status_message = msg;
                     }
@@ -1662,12 +1667,19 @@ impl App {
                     match parts[1].parse::<Language>() {
                         Ok(lang) => {
                             self.language = lang;
-                            self.status_message = format!("language: {} ({})", lang.code(), lang.name());
+                            self.status_message =
+                                format!("language: {} ({})", lang.code(), lang.name());
                         }
-                        Err(e) => self.status_message = format!("{e}. Use: en es fr de ja zh ko ru"),
+                        Err(e) => {
+                            self.status_message = format!("{e}. Use: en es fr de ja zh ko ru")
+                        }
                     }
                 } else {
-                    self.status_message = format!("current language: {} ({})", self.language.code(), self.language.name());
+                    self.status_message = format!(
+                        "current language: {} ({})",
+                        self.language.code(),
+                        self.language.name()
+                    );
                 }
             }
             "module" => {
@@ -1729,19 +1741,38 @@ impl App {
                     let branch = parts[4];
                     let base = crate::core::worktree::worktree_base(&self.cwd);
                     let path = base.join(branch);
-                    match self.worktree_provider_registry.run_create(provider_id, branch, &path, &base) {
-                        Ok(true) => self.status_message = format!("module worktree created: {branch}"),
-                        Ok(false) => self.status_message = format!("module worktree create rejected: {branch}"),
-                        Err(e) => self.status_message = format!("module worktree create failed: {e}"),
+                    match self.worktree_provider_registry.run_create(
+                        provider_id,
+                        branch,
+                        &path,
+                        &base,
+                    ) {
+                        Ok(true) => {
+                            self.status_message = format!("module worktree created: {branch}")
+                        }
+                        Ok(false) => {
+                            self.status_message =
+                                format!("module worktree create rejected: {branch}")
+                        }
+                        Err(e) => {
+                            self.status_message = format!("module worktree create failed: {e}")
+                        }
                     }
                 } else if parts.len() >= 4 && parts[1] == "worktree" && parts[2] == "remove" {
                     let provider_id = parts[3];
                     let path = std::path::PathBuf::from(parts.get(4).unwrap_or(&""));
                     let identity = parts.get(5).copied();
-                    match self.worktree_provider_registry.run_remove(provider_id, &path, identity) {
+                    match self
+                        .worktree_provider_registry
+                        .run_remove(provider_id, &path, identity)
+                    {
                         Ok(true) => self.status_message = "module worktree removed".to_string(),
-                        Ok(false) => self.status_message = "module worktree remove rejected".to_string(),
-                        Err(e) => self.status_message = format!("module worktree remove failed: {e}"),
+                        Ok(false) => {
+                            self.status_message = "module worktree remove rejected".to_string()
+                        }
+                        Err(e) => {
+                            self.status_message = format!("module worktree remove failed: {e}")
+                        }
                     }
                 } else {
                     self.status_message =
@@ -1793,7 +1824,8 @@ impl App {
                         }
                         Ok(o) => {
                             let _ = std::fs::remove_file(&dest);
-                            self.status_message = format!("plugin install failed (curl {:?})", o.status);
+                            self.status_message =
+                                format!("plugin install failed (curl {:?})", o.status);
                         }
                         Err(e) => self.status_message = format!("plugin install error: {e}"),
                     }
@@ -1806,7 +1838,9 @@ impl App {
                 } else if parts.len() >= 2 && parts[1] == "marketplace" {
                     self.status_message = "plugin marketplace: https://github.com/GrayCodeAI/term-plugins\n  :plugin install <url> [name]  — install from any URL\n  :plugin list                  — list installed plugins\n  :plugin remove <name>         — remove a plugin".to_string();
                 } else {
-                    self.status_message = "usage: plugin list | install <url> [name] | remove <name> | marketplace".to_string();
+                    self.status_message =
+                        "usage: plugin list | install <url> [name] | remove <name> | marketplace"
+                            .to_string();
                 }
             }
             "worktree" => {
@@ -2557,8 +2591,10 @@ pub(crate) fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
             }
             KeyCode::Char('v') => {
                 app.copy_start = Some((app.copy_cursor_row, app.copy_cursor_col));
-                app.copy_selection = Some(((app.copy_cursor_row, app.copy_cursor_col),
-                                           (app.copy_cursor_row, app.copy_cursor_col)));
+                app.copy_selection = Some((
+                    (app.copy_cursor_row, app.copy_cursor_col),
+                    (app.copy_cursor_row, app.copy_cursor_col),
+                ));
             }
             KeyCode::Char('y') => {
                 if let Some(((r1, c1), (r2, c2))) = &app.copy_selection {
@@ -2577,8 +2613,11 @@ pub(crate) fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
                                     let cs = c_start.min(cols);
                                     let ce = c_end.min(cols);
                                     if cs < ce {
-                                        let selected: String = line.chars().skip(cs).take(ce - cs).collect();
-                                        if r > r_start { text.push('\n'); }
+                                        let selected: String =
+                                            line.chars().skip(cs).take(ce - cs).collect();
+                                        if r > r_start {
+                                            text.push('\n');
+                                        }
                                         text.push_str(&selected);
                                     }
                                 }
@@ -2596,9 +2635,11 @@ pub(crate) fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
                                 false
                             };
                             if copied {
-                                app.status_message = format!("copied {} chars to clipboard", text.len());
+                                app.status_message =
+                                    format!("copied {} chars to clipboard", text.len());
                             } else {
-                                app.status_message = format!("selected {} chars (no clipboard)", text.len());
+                                app.status_message =
+                                    format!("selected {} chars (no clipboard)", text.len());
                             }
                         }
                     }
@@ -2652,7 +2693,8 @@ pub(crate) fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
             }
             KeyCode::Enter => {
                 // Jump to next match.
-                app.pane_search_selected = (app.pane_search_selected + 1) % app.pane_search_matches.len().max(1);
+                app.pane_search_selected =
+                    (app.pane_search_selected + 1) % app.pane_search_matches.len().max(1);
             }
             KeyCode::Backspace => {
                 app.pane_search_buffer.pop();
@@ -2717,14 +2759,21 @@ pub(crate) fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
 
     match (key.code, key.modifiers) {
         (KeyCode::Char('?'), _) => app.show_help = !app.show_help,
-        (KeyCode::Char('/'), _) if !app.command_mode && !app.delegate_mode && !app.commander_mode => {
+        (KeyCode::Char('/'), _)
+            if !app.command_mode && !app.delegate_mode && !app.commander_mode =>
+        {
             app.pane_search_mode = true;
             app.pane_search_buffer.clear();
             app.pane_search_matches.clear();
             app.pane_search_selected = 0;
             app.pane_search_pane = Some(app.active_pane);
         }
-        (KeyCode::Char('v'), _) if !app.command_mode && !app.delegate_mode && !app.commander_mode && !app.pane_search_mode => {
+        (KeyCode::Char('v'), _)
+            if !app.command_mode
+                && !app.delegate_mode
+                && !app.commander_mode
+                && !app.pane_search_mode =>
+        {
             app.copy_mode = true;
             app.copy_cursor_row = 0;
             app.copy_cursor_col = 0;

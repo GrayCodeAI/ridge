@@ -5,7 +5,7 @@
 
 use serde::Deserialize;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 /// GitHub release info from the API.
 #[derive(Debug, Deserialize)]
@@ -26,7 +26,11 @@ pub enum UpdateStatus {
     /// Already on the latest version.
     UpToDate { current: String, latest: String },
     /// A newer version is available.
-    UpdateAvailable { current: String, latest: String, asset_url: String },
+    UpdateAvailable {
+        current: String,
+        latest: String,
+        asset_url: String,
+    },
     /// Error checking for updates.
     Error(String),
 }
@@ -152,10 +156,7 @@ pub fn install_update(asset_url: &str) -> Result<()> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(
-            &current_bin,
-            std::fs::Permissions::from_mode(0o755),
-        );
+        let _ = std::fs::set_permissions(&current_bin, std::fs::Permissions::from_mode(0o755));
     }
 
     // Clean up backup on success.
@@ -223,7 +224,9 @@ mod tests {
             asset_url: "https://example.com/term.tar.gz".to_string(),
         };
         match status {
-            UpdateStatus::UpdateAvailable { current, latest, .. } => {
+            UpdateStatus::UpdateAvailable {
+                current, latest, ..
+            } => {
                 assert_eq!(current, "0.9.0");
                 assert_eq!(latest, "1.0.0");
             }

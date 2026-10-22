@@ -4,11 +4,11 @@
 //! via the Unix domain socket to show real panes and stream live PTY output.
 
 use axum::{
-    extract::ws::{Message, WebSocket, WebSocketUpgrade},
+    Router,
     extract::State,
+    extract::ws::{Message, WebSocket, WebSocketUpgrade},
     response::Html,
     routing::get,
-    Router,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -46,15 +46,13 @@ enum ServerMessage {
         status: String,
     },
     #[serde(rename = "pane_output")]
-    Output {
-        pane_id: usize,
-        output: String,
-    },
+    Output { pane_id: usize, output: String },
     #[serde(rename = "pane_list")]
     List { panes: Vec<serde_json::Value> },
 }
 
 /// Fetch pane output from a running `term --api` instance via the Unix socket.
+#[cfg(unix)]
 fn fetch_pane_output(socket_path: &Path, pane_id: usize, cursor: usize) -> Option<(String, usize)> {
     use std::io::{Read, Write};
     use std::os::unix::net::UnixStream;
@@ -64,7 +62,8 @@ fn fetch_pane_output(socket_path: &Path, pane_id: usize, cursor: usize) -> Optio
         "cmd": "GetOutput",
         "pane": pane_id,
         "cursor": cursor,
-    })).ok()?;
+    }))
+    .ok()?;
     stream.write_all(request.as_bytes()).ok()?;
     let mut buf = [0u8; 65536];
     let n = stream.read(&mut buf).ok()?;
@@ -72,6 +71,15 @@ fn fetch_pane_output(socket_path: &Path, pane_id: usize, cursor: usize) -> Optio
     let output = response.get("output")?.as_str()?.to_string();
     let next_cursor = response.get("next_cursor")?.as_u64()? as usize;
     Some((output, next_cursor))
+}
+
+#[cfg(not(unix))]
+fn fetch_pane_output(
+    _socket_path: &Path,
+    _pane_id: usize,
+    _cursor: usize,
+) -> Option<(String, usize)> {
+    None
 }
 
 /// Track per-pane output cursors for polling.
@@ -88,7 +96,12 @@ impl PaneCursorTracker {
     }
 
     pub fn get_cursor(&self, pane_id: usize) -> usize {
-        self.cursors.lock().unwrap().get(&pane_id).copied().unwrap_or(0)
+        self.cursors
+            .lock()
+            .unwrap()
+            .get(&pane_id)
+            .copied()
+            .unwrap_or(0)
     }
 
     pub fn set_cursor(&self, pane_id: usize, cursor: usize) {
@@ -151,6 +164,7 @@ impl WebState {
 }
 
 /// Fetch pane list from a running `term --api` instance via the Unix socket.
+#[cfg(unix)]
 fn fetch_panes_from_api(socket_path: &Path) -> Option<Vec<serde_json::Value>> {
     use std::io::{Read, Write};
     use std::os::unix::net::UnixStream;
@@ -164,10 +178,12 @@ fn fetch_panes_from_api(socket_path: &Path) -> Option<Vec<serde_json::Value>> {
         return None;
     }
     let response: serde_json::Value = serde_json::from_slice(&buf[..n]).ok()?;
-    response
-        .get("data")
-        .and_then(|d| d.as_array())
-        .cloned()
+    response.get("data").and_then(|d| d.as_array()).cloned()
+}
+
+#[cfg(not(unix))]
+fn fetch_panes_from_api(_socket_path: &Path) -> Option<Vec<serde_json::Value>> {
+    None
 }
 
 /// Background task that polls the API socket for pane updates.
@@ -180,19 +196,39 @@ async fn poll_api_socket(state: Arc<WebState>, socket_path: PathBuf, poll_interv
             // Broadcast each pane's state to WebSocket clients
             for pane in &panes {
                 let pane_id = pane.get("id").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
-                let title = pane.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                let agent = pane.get("agent").and_then(|v| v.as_str()).map(|s| s.to_string());
-                let status = pane.get("status").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
-                let msg = serde_json::to_string(&ServerMessage::State { pane_id, title, agent, status }).unwrap_or_default();
+                let title = pane
+                    .get("title")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let agent = pane
+                    .get("agent")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                let status = pane
+                    .get("status")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+                let msg = serde_json::to_string(&ServerMessage::State {
+                    pane_id,
+                    title,
+                    agent,
+                    status,
+                })
+                .unwrap_or_default();
                 let _ = state.output_tx().send((pane_id, msg));
 
                 // Poll for PTY output from this pane
                 let cursor = state.cursor_tracker().get_cursor(pane_id);
-                if let Some((output, next_cursor)) = fetch_pane_output(&socket_path, pane_id, cursor) {
+                if let Some((output, next_cursor)) =
+                    fetch_pane_output(&socket_path, pane_id, cursor)
+                {
                     if !output.is_empty() {
                         let _ = state.output_tx().send((
                             pane_id,
-                            serde_json::to_string(&ServerMessage::Output { pane_id, output }).unwrap_or_default(),
+                            serde_json::to_string(&ServerMessage::Output { pane_id, output })
+                                .unwrap_or_default(),
                         ));
                     }
                     state.cursor_tracker().set_cursor(pane_id, next_cursor);
@@ -322,7 +358,11 @@ const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
 /// Start the Luvus Web server.
 /// If `socket_path` is provided, connects to a running `term --api` instance
 /// to fetch real pane data. Otherwise serves mock/static state.
-pub async fn start_web(state: Arc<WebState>, port: u16, socket_path: Option<PathBuf>) -> std::io::Result<()> {
+pub async fn start_web(
+    state: Arc<WebState>,
+    port: u16,
+    socket_path: Option<PathBuf>,
+) -> std::io::Result<()> {
     // If a socket path is given, spawn a background task to poll the API.
     if let Some(sp) = socket_path.clone() {
         let state_for_poll = state.clone();
@@ -355,7 +395,9 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<WebState>) {
     // Send initial pane state
     let panes = state.panes_snapshot();
     if !panes.is_empty() {
-        let _ = socket.send(Message::Text(serde_json::to_string(&panes).unwrap())).await;
+        let _ = socket
+            .send(Message::Text(serde_json::to_string(&panes).unwrap()))
+            .await;
     }
 
     // Subscribe to output broadcast
@@ -406,6 +448,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<WebState>) {
 }
 
 /// Send a message to a pane via the term API socket.
+#[cfg(unix)]
 fn send_to_api_pane(socket_path: &Path, pane_id: usize, message: &str) -> std::io::Result<()> {
     use std::io::{Read, Write};
     use std::os::unix::net::UnixStream;
@@ -420,9 +463,20 @@ fn send_to_api_pane(socket_path: &Path, pane_id: usize, message: &str) -> std::i
     let mut buf = [0u8; 4096];
     let n = stream.read(&mut buf)?;
     if n == 0 {
-        return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "unexpected EOF"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "unexpected EOF",
+        ));
     }
     Ok(())
+}
+
+#[cfg(not(unix))]
+fn send_to_api_pane(_socket_path: &Path, _pane_id: usize, _message: &str) -> std::io::Result<()> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "term --web requires Unix-domain sockets (not available on Windows)",
+    ))
 }
 
 #[cfg(test)]
