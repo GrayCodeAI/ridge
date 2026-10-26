@@ -84,30 +84,46 @@ impl Config {
 }
 
 pub fn config_dir() -> PathBuf {
-    if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
-        return PathBuf::from(xdg).join("term");
-    }
-    if let Ok(home) = std::env::var("HOME") {
-        return PathBuf::from(home).join(".config").join("term");
-    }
-    PathBuf::from(".config").join("term")
+    let base = if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+        PathBuf::from(xdg)
+    } else if let Ok(home) = std::env::var("HOME") {
+        PathBuf::from(home).join(".config")
+    } else {
+        PathBuf::from(".config")
+    };
+    prefer_existing_dir(base)
 }
 
 pub fn config_file() -> PathBuf {
-    config_dir().join("term.toml")
+    let dir = config_dir();
+    let current = dir.join("ridge.toml");
+    let legacy = dir.join("term.toml");
+    if !current.exists() && legacy.exists() {
+        legacy
+    } else {
+        current
+    }
 }
 
 pub fn data_dir() -> PathBuf {
-    if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
-        return PathBuf::from(xdg).join("term");
+    let base = if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
+        PathBuf::from(xdg)
+    } else if let Ok(home) = std::env::var("HOME") {
+        PathBuf::from(home).join(".local").join("share")
+    } else {
+        PathBuf::from(".local").join("share")
+    };
+    prefer_existing_dir(base)
+}
+
+fn prefer_existing_dir(base: PathBuf) -> PathBuf {
+    let current = base.join("ridge");
+    let legacy = base.join("term");
+    if !current.exists() && legacy.is_dir() {
+        legacy
+    } else {
+        current
     }
-    if let Ok(home) = std::env::var("HOME") {
-        return PathBuf::from(home)
-            .join(".local")
-            .join("share")
-            .join("term");
-    }
-    PathBuf::from(".local").join("share").join("term")
 }
 
 #[cfg(test)]
@@ -120,5 +136,18 @@ mod tests {
         let s = toml::to_string_pretty(&cfg).unwrap();
         let parsed: Config = toml::from_str(&s).unwrap();
         assert_eq!(parsed.theme, cfg.theme);
+    }
+
+    #[test]
+    fn legacy_directory_is_used_until_ridge_directory_exists() {
+        let base = std::env::temp_dir().join(format!("ridge-config-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let legacy = base.join("term");
+        std::fs::create_dir_all(&legacy).unwrap();
+        assert_eq!(prefer_existing_dir(base.clone()), legacy);
+        let current = base.join("ridge");
+        std::fs::create_dir_all(&current).unwrap();
+        assert_eq!(prefer_existing_dir(base.clone()), current);
+        std::fs::remove_dir_all(base).unwrap();
     }
 }

@@ -1,6 +1,6 @@
 # Agent Adapters
 
-Term uses an `Agent` trait to support multiple coding agents.
+Ridge uses an `Agent` trait to support multiple coding agents.
 
 ## Implementing a new adapter
 

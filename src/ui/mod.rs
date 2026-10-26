@@ -137,7 +137,7 @@ fn render_mobile(f: &mut Frame, app: &mut App, area: Rect) {
         .split(area);
 
     let header = Paragraph::new(format!(
-        " Term mobile | pane {} | {} ",
+        " Ridge mobile | pane {} | {} ",
         app.active_pane, app.status_message
     ))
     .style(Style::default().fg(palette.accent));
@@ -321,7 +321,7 @@ fn render_tabs(f: &mut Frame, app: &App, area: Rect) {
         .position(|t| *t == app.current_tab)
         .unwrap_or(0);
     let tabs = Tabs::new(titles)
-        .block(Block::default().borders(Borders::ALL).title(" Term "))
+        .block(Block::default().borders(Borders::ALL).title(" Ridge "))
         .select(selected)
         .style(Style::default().fg(palette.fg))
         .highlight_style(
@@ -845,7 +845,7 @@ fn render_settings(f: &mut Frame, app: &App, area: Rect) {
         modules.push_str(&format!("  {name} -> {out}\n"));
     }
     if modules.is_empty() {
-        modules = "  (none in ~/.config/term/modules)\n".to_string();
+        modules = "  (none in ~/.config/ridge/modules)\n".to_string();
     }
     let mut accounts = String::new();
     for a in &app.config.accounts {
@@ -855,7 +855,7 @@ fn render_settings(f: &mut Frame, app: &App, area: Rect) {
         accounts = "  (none)\n".to_string();
     }
     let text = format!(
-        "Theme: {}\nPrefix: {}\nQuit: {}\n\nConfig: ~/.config/term/term.toml\nData:   ~/.local/share/term\nCWD:    {}\nPanes:  {}\n\nAccounts:\n{}\nModules:\n{}",
+        "Theme: {}\nPrefix: {}\nQuit: {}\n\nConfig: ~/.config/ridge/ridge.toml\nData:   ~/.local/share/ridge\nCWD:    {}\nPanes:  {}\n\nAccounts:\n{}\nModules:\n{}",
         app.config.theme,
         app.config.keybindings.prefix,
         app.config.keybindings.quit,

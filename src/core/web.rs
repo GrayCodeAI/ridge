@@ -1,6 +1,6 @@
-//! Luvus Web — browser client for live workspaces, terminals, and agent sessions.
+//! Ridge Web — browser client for live workspaces, terminals, and agent sessions.
 //!
-//! Can run standalone (mock data) or connect to a running `term --api` instance
+//! Can run standalone (mock data) or connect to a running `ridge --api` instance
 //! via the Unix domain socket to show real panes and stream live PTY output.
 
 use axum::{
@@ -19,9 +19,9 @@ use std::sync::{Arc, Mutex};
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
 
-/// Path to the term API socket (for connecting to a running `term --api` instance).
+/// Path to the ridge API socket (for connecting to a running `ridge --api` instance).
 pub fn socket_path() -> PathBuf {
-    crate::config::data_dir().join("term.sock")
+    crate::config::data_dir().join("ridge.sock")
 }
 
 /// WebSocket message from client to server.
@@ -51,7 +51,7 @@ enum ServerMessage {
     List { panes: Vec<serde_json::Value> },
 }
 
-/// Fetch pane output from a running `term --api` instance via the Unix socket.
+/// Fetch pane output from a running `ridge --api` instance via the Unix socket.
 #[cfg(unix)]
 fn fetch_pane_output(socket_path: &Path, pane_id: usize, cursor: usize) -> Option<(String, usize)> {
     use std::io::{Read, Write};
@@ -115,7 +115,7 @@ pub struct WebState {
     panes: Arc<Mutex<Vec<serde_json::Value>>>,
     /// Broadcast channel for live PTY output (pane_id, output_text)
     output_tx: broadcast::Sender<(usize, String)>,
-    /// Optional socket path to connect to a running `term --api` instance.
+    /// Optional socket path to connect to a running `ridge --api` instance.
     socket_path: Option<PathBuf>,
     /// Per-pane output cursors for polling PTY output.
     cursor_tracker: Arc<PaneCursorTracker>,
@@ -163,7 +163,7 @@ impl WebState {
     }
 }
 
-/// Fetch pane list from a running `term --api` instance via the Unix socket.
+/// Fetch pane list from a running `ridge --api` instance via the Unix socket.
 #[cfg(unix)]
 fn fetch_panes_from_api(socket_path: &Path) -> Option<Vec<serde_json::Value>> {
     use std::io::{Read, Write};
@@ -244,7 +244,7 @@ const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Term — Luvus Web</title>
+    <title>Ridge Web</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f0f0f; color: #e0e0e0; }
@@ -269,7 +269,7 @@ const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
 </head>
 <body>
     <header>
-        <h1>🖥️ Term — Luvus Web</h1>
+        <h1>🖥️ Ridge Web</h1>
         <p id="status">Connecting...</p>
     </header>
     <div class="grid" id="grid"></div>
@@ -356,7 +356,7 @@ const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
 </html>"#;
 
 /// Start the Luvus Web server.
-/// If `socket_path` is provided, connects to a running `term --api` instance
+/// If `socket_path` is provided, connects to a running `ridge --api` instance
 /// to fetch real pane data. Otherwise serves mock/static state.
 pub async fn start_web(
     state: Arc<WebState>,
@@ -426,7 +426,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<WebState>) {
                                 // Already subscribed via broadcast channel
                             }
                             ClientMessage::PaneInput { pane_id, input } => {
-                                // Forward to the running term instance via socket API
+                                // Forward to the running ridge instance via socket API
                                 if let Some(sp) = state.socket_path() {
                                     let _ = send_to_api_pane(sp, pane_id, &input);
                                 }
@@ -447,7 +447,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<WebState>) {
     }
 }
 
-/// Send a message to a pane via the term API socket.
+/// Send a message to a pane via the ridge API socket.
 #[cfg(unix)]
 fn send_to_api_pane(socket_path: &Path, pane_id: usize, message: &str) -> std::io::Result<()> {
     use std::io::{Read, Write};
@@ -475,7 +475,7 @@ fn send_to_api_pane(socket_path: &Path, pane_id: usize, message: &str) -> std::i
 fn send_to_api_pane(_socket_path: &Path, _pane_id: usize, _message: &str) -> std::io::Result<()> {
     Err(std::io::Error::new(
         std::io::ErrorKind::Unsupported,
-        "term --web requires Unix-domain sockets (not available on Windows)",
+        "ridge --web requires Unix-domain sockets (not available on Windows)",
     ))
 }
 

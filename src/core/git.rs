@@ -97,7 +97,7 @@ mod tests {
 
     #[test]
     fn run_git_in_temp_repo() {
-        let dir = std::env::temp_dir().join("term-test-repo");
+        let dir = std::env::temp_dir().join("ridge-test-repo");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         Command::new("git")

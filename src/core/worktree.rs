@@ -51,7 +51,13 @@ pub fn remove_worktree(repo: &Path, path: &Path) -> Result<(), String> {
 }
 
 pub fn worktree_base(repo: &Path) -> PathBuf {
-    repo.join(".term-worktrees")
+    let current = repo.join(".ridge-worktrees");
+    let legacy = repo.join(".term-worktrees");
+    if !current.exists() && legacy.is_dir() {
+        legacy
+    } else {
+        current
+    }
 }
 
 /// Merge `branch` into the current branch (used to promote a race winner).

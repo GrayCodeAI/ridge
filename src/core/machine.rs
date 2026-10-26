@@ -89,7 +89,7 @@ impl MachineManager {
                 cmd.push_str(&format!(" -i {}", key.display()));
             }
             if let Some(session) = &m.session {
-                cmd.push_str(&format!(" -t 'term --attach-session {}'", session));
+                cmd.push_str(&format!(" -t 'ridge --attach-session {}'", session));
             }
             cmd
         })
@@ -110,7 +110,7 @@ impl MachineManager {
         }
         if let Some(session) = &profile.session {
             cmd.arg("-t")
-                .arg(format!("term --attach-session {session}"));
+                .arg(format!("ridge --attach-session {session}"));
         }
 
         let status = cmd.status().map_err(|e| e.to_string())?;

@@ -1,11 +1,12 @@
-# Term
+# Ridge
 
 Mission control for your AI agents. Terminal-native TUI. Part of [GrayCodeAI](https://github.com/GrayCodeAI).
 
-[![CI](https://github.com/GrayCodeAI/term/actions/workflows/ci.yml/badge.svg)](https://github.com/GrayCodeAI/term/actions/workflows/ci.yml)
-[![Release](https://github.com/GrayCodeAI/term/actions/workflows/release.yml/badge.svg)](https://github.com/GrayCodeAI/term/actions/workflows/release.yml)
-[![Security Audit](https://github.com/GrayCodeAI/term/actions/workflows/audit.yml/badge.svg)](https://github.com/GrayCodeAI/term/actions/workflows/audit.yml)
-[![Crates.io](https://img.shields.io/crates/v/term.svg)](https://crates.io/crates/term)
+Formerly **Term**. The command and package are now `ridge`. Existing Term configuration, session data, task boards, race history, worktrees, and module manifests are read when their Ridge equivalents do not exist.
+
+[![CI](https://github.com/GrayCodeAI/ridge/actions/workflows/ci.yml/badge.svg)](https://github.com/GrayCodeAI/ridge/actions/workflows/ci.yml)
+[![Release](https://github.com/GrayCodeAI/ridge/actions/workflows/release.yml/badge.svg)](https://github.com/GrayCodeAI/ridge/actions/workflows/release.yml)
+[![Security Audit](https://github.com/GrayCodeAI/ridge/actions/workflows/audit.yml/badge.svg)](https://github.com/GrayCodeAI/ridge/actions/workflows/audit.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ## Status
@@ -18,13 +19,13 @@ Full mission control: 12 agent adapters (Reflect, Claude, Codex, OpenCode, Gemin
 
 ## Scripting & diagnostics
 
-- `term --headless` — machine-readable agent/branch/status/task facts
-- `term --dashboard` — full mission-control state as JSON
-- `term --doctor` — check which agent CLIs / tools are installed
+- `ridge --headless` — machine-readable agent/branch/status/task facts
+- `ridge --dashboard` — full mission-control state as JSON
+- `ridge --doctor` — check which agent CLIs / tools are installed
 
 ## Session timelines
 
-Every pane's raw PTY output is continuously logged to `<data_dir>/timelines/pane-<id>.log` — replay what an agent did while you were away with `less ~/.local/share/term/timelines/pane-1.log`, `:timeline view <pane>` (live replay pane inside Term, follows new output), or `:timeline export postmortem.log`. A companion `.meta` file records timestamped byte-offset milestones for time-scanning. SSH/remote panes get status detection (blocked/idle/working) via the generic heuristics.
+Every pane's raw PTY output is continuously logged to `<data_dir>/timelines/pane-<id>.log` — replay what an agent did while you were away with `less ~/.local/share/ridge/timelines/pane-1.log`, `:timeline view <pane>` (live replay pane inside Ridge, follows new output), or `:timeline export postmortem.log`. A companion `.meta` file records timestamped byte-offset milestones for time-scanning. SSH/remote panes get status detection (blocked/idle/working) via the generic heuristics.
 
 ## Build
 
@@ -40,12 +41,10 @@ cargo run
 cargo install --path .
 
 # Via install script
-curl -fsSL https://gryacodeai.com/term/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/GrayCodeAI/ridge/main/install.sh | sh
 
-# Via Homebrew (once tap is published)
-brew install gryacodeai/tap/term
 # or restore last session's panes
-term --restore
+ridge --restore
 ```
 
 ## CI / Release

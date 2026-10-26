@@ -125,7 +125,9 @@ impl RaceHistory {
     }
 
     pub fn load(repo: &std::path::Path) -> Self {
-        let path = repo.join(".term-races.json");
+        let current = repo.join(".ridge-races.json");
+        let legacy = repo.join(".term-races.json");
+        let path = if current.exists() { current } else { legacy };
         std::fs::read_to_string(&path)
             .ok()
             .and_then(|s| serde_json::from_str::<RaceHistory>(&s).ok())
@@ -133,7 +135,7 @@ impl RaceHistory {
     }
 
     pub fn save(&self, repo: &std::path::Path) -> Result<(), String> {
-        let path = repo.join(".term-races.json");
+        let path = repo.join(".ridge-races.json");
         let json = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
         std::fs::write(&path, json).map_err(|e| e.to_string())
     }
@@ -218,7 +220,7 @@ mod history_tests {
 
     #[test]
     fn save_load_roundtrip() {
-        let dir = std::env::temp_dir().join("term-race-history");
+        let dir = std::env::temp_dir().join("ridge-race-history");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let mut h = RaceHistory::default();
@@ -227,8 +229,8 @@ mod history_tests {
         let h2 = RaceHistory::load(&dir);
         assert_eq!(h2.records.len(), 1);
         assert_eq!(h2.records[0].winner_agent.as_deref(), Some("opencode"));
-        let path = dir.join(".term-races.json");
-        assert_eq!(path, dir.join(".term-races.json"));
+        let path = dir.join(".ridge-races.json");
+        assert_eq!(path, dir.join(".ridge-races.json"));
         assert!(path.exists());
         let _ = std::fs::remove_dir_all(&dir);
     }

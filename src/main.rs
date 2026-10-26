@@ -21,15 +21,15 @@ async fn main() -> Result<()> {
     // Logging to file (never stdout — TUI owns stdout).
     let log_dir = config::config_dir();
     std::fs::create_dir_all(&log_dir)?;
-    let file_appender = tracing_appender::rolling::never(&log_dir, "term.log");
+    let file_appender = tracing_appender::rolling::never(&log_dir, "ridge.log");
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive("term=info".parse()?))
+        .with_env_filter(EnvFilter::from_default_env().add_directive("ridge=info".parse()?))
         .with_writer(non_blocking)
         .with_ansi(false)
         .init();
 
-    tracing::info!("term starting (version {})", env!("CARGO_PKG_VERSION"));
+    tracing::info!("ridge starting (version {})", env!("CARGO_PKG_VERSION"));
 
     let config = config::Config::load()?;
 

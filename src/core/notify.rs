@@ -23,7 +23,7 @@ pub fn command_for(title: &str, body: &str) -> Option<(String, Vec<String>)> {
             "notify-send".to_string(),
             vec![
                 "-a".to_string(),
-                "term".to_string(),
+                "ridge".to_string(),
                 title.to_string(),
                 body.to_string(),
             ],
@@ -99,10 +99,10 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn linux_uses_notify_send_with_argument_vector() {
-        let (prog, args) = command_for("Term — Claude #1", "agent is BLOCKED").unwrap();
+        let (prog, args) = command_for("Ridge — Claude #1", "agent is BLOCKED").unwrap();
         assert_eq!(prog, "notify-send");
-        assert_eq!(args[1], "term");
-        assert_eq!(args[2], "Term — Claude #1");
+        assert_eq!(args[1], "ridge");
+        assert_eq!(args[2], "Ridge — Claude #1");
         // argument vectors: no shell, so quotes are literal-safe
         assert_eq!(args[3], "agent is BLOCKED");
     }
@@ -126,7 +126,7 @@ mod tests {
     fn notify_never_panics_on_unsupported_platforms() {
         // On unsupported platforms this is a safe no-op returning false;
         // on supported ones it spawns (result depends on the environment).
-        let _ = notify("term test", "if you can read this in a toast, hooks work");
+        let _ = notify("ridge test", "if you can read this in a toast, hooks work");
     }
 
     #[test]

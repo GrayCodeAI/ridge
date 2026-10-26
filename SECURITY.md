@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please report security issues privately via
-[GitHub Security Advisories](https://github.com/GrayCodeAI/term/security/advisories/new)
+[GitHub Security Advisories](https://github.com/GrayCodeAI/ridge/security/advisories/new)
 rather than opening a public issue.
 
 ## Hardening in this codebase
@@ -14,7 +14,7 @@ rather than opening a public issue.
   empty branch segments.
 - **Read-only diff review**: the diff tab never mutates the repository.
 - **Modules**: run as local executables you installed yourself from
-  `~/.config/term/modules/` — like any script in your PATH, only add ones you trust.
+  `~/.config/ridge/modules/` — like any script in your PATH, only add ones you trust.
 
 ## Audits
 

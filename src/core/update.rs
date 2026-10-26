@@ -1,6 +1,6 @@
 //! Self-update command (from Luvus's `luvus update`).
 //!
-//! Checks GitHub releases for a newer version of term and downloads/installs it.
+//! Checks GitHub releases for a newer version of ridge and downloads/installs it.
 //! Uses `curl` via std::process::Command (no HTTP crate needed).
 
 use serde::Deserialize;
@@ -40,7 +40,7 @@ pub fn check_update(current_version: &str) -> UpdateStatus {
     let output = std::process::Command::new("curl")
         .args([
             "-fsSL",
-            "https://api.github.com/repos/GrayCodeAI/term/releases/latest",
+            "https://api.github.com/repos/GrayCodeAI/ridge/releases/latest",
         ])
         .output();
 
@@ -89,11 +89,11 @@ pub fn check_update(current_version: &str) -> UpdateStatus {
 /// Download and install an update.
 /// Downloads the tarball with curl, extracts, and replaces the current binary.
 pub fn install_update(asset_url: &str) -> Result<()> {
-    let tmp_dir = std::env::temp_dir().join("term-update");
+    let tmp_dir = std::env::temp_dir().join("ridge-update");
     let _ = std::fs::remove_dir_all(&tmp_dir);
     std::fs::create_dir_all(&tmp_dir).map_err(|e| anyhow!("create tmp dir: {e}"))?;
 
-    let tarball = tmp_dir.join("term.tar.gz");
+    let tarball = tmp_dir.join("ridge.tar.gz");
 
     // Download with curl.
     let download = std::process::Command::new("curl")
@@ -126,22 +126,22 @@ pub fn install_update(asset_url: &str) -> Result<()> {
         ));
     }
 
-    // Find the term binary in the extracted archive.
-    let mut term_bin = None;
+    // Find the ridge binary in the extracted archive.
+    let mut ridge_bin = None;
     for entry in std::fs::read_dir(&extract_dir).map_err(|e| anyhow!("read extract dir: {e}"))? {
         let entry = entry.map_err(|e| anyhow!("read entry: {e}"))?;
         let path = entry.path();
         if path.is_file() {
             if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if name == "term" || name.starts_with("term-") {
-                    term_bin = Some(path);
+                if name == "ridge" || name.starts_with("ridge-") {
+                    ridge_bin = Some(path);
                     break;
                 }
             }
         }
     }
 
-    let new_bin = term_bin.ok_or_else(|| anyhow!("term binary not found in archive"))?;
+    let new_bin = ridge_bin.ok_or_else(|| anyhow!("ridge binary not found in archive"))?;
 
     // Get current binary path.
     let current_bin = std::env::current_exe().map_err(|e| anyhow!("current exe: {e}"))?;
@@ -165,18 +165,18 @@ pub fn install_update(asset_url: &str) -> Result<()> {
     Ok(())
 }
 
-/// Entry point for `term update`. Checks for updates and offers to install.
+/// Entry point for `ridge update`. Checks for updates and offers to install.
 pub fn run_update(current_version: &str) -> Result<()> {
     match check_update(current_version) {
         UpdateStatus::UpToDate { current, latest } => {
-            println!("term {current} is up to date (latest: {latest})");
+            println!("ridge {current} is up to date (latest: {latest})");
         }
         UpdateStatus::UpdateAvailable {
             current,
             latest,
             asset_url,
         } => {
-            println!("term update available: {current} → {latest}");
+            println!("ridge update available: {current} → {latest}");
             print!("Download and install now? [y/N] ");
             use std::io::{self, Write};
             io::stdout().flush()?;
@@ -184,7 +184,7 @@ pub fn run_update(current_version: &str) -> Result<()> {
             io::stdin().read_line(&mut input)?;
             if input.trim().eq_ignore_ascii_case("y") {
                 install_update(&asset_url)?;
-                println!("term updated to {latest}. Please restart term.");
+                println!("ridge updated to {latest}. Please restart ridge.");
             } else {
                 println!("Update cancelled.");
             }
@@ -221,7 +221,7 @@ mod tests {
         let status = UpdateStatus::UpdateAvailable {
             current: "0.9.0".to_string(),
             latest: "1.0.0".to_string(),
-            asset_url: "https://example.com/term.tar.gz".to_string(),
+            asset_url: "https://example.com/ridge.tar.gz".to_string(),
         };
         match status {
             UpdateStatus::UpdateAvailable {

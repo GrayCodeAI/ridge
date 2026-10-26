@@ -1,4 +1,4 @@
-# Term — Makefile
+# Ridge — Makefile
 
 .PHONY: build test clippy fmt check run install clean help
 
@@ -32,7 +32,7 @@ check: fmt-check clippy test ## Run all checks (fmt, clippy, test)
 run: build ## Build and run the binary
 	$(CARGO) run
 
-install: ## Install term to ~/.cargo/bin
+install: ## Install ridge to ~/.cargo/bin
 	$(CARGO) install --path .
 
 clean: ## Remove build artifacts

@@ -1,6 +1,6 @@
-# Term Documentation
+# Ridge Documentation
 
-Welcome to Term docs.
+Welcome to Ridge docs.
 
 ## Getting Started
 - [Installation](./installation.md)

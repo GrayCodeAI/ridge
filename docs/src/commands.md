@@ -28,7 +28,7 @@ Type `:` to enter command mode.
 - `task subagent <parent> <agent>` — spawn subagent
 - `race <prompt>` — start a fan-out race: claude, codex, and opencode each get their own git worktree + branch, and the prompt is delegated to them immediately
 - `race` / `race status` — show contestants, statuses, gates, and the winner (★)
-- `race leaderboard` — aggregated wins per agent from past races (persisted to `<repo>/.term-races.json`, last 50 outcomes) plus the three most recent races
+- `race leaderboard` — aggregated wins per agent from past races (persisted to `<repo>/.ridge-races.json`, last 50 outcomes) plus the three most recent races
 - `race gate <idx>` — run the quality gate in one contestant's worktree (`cargo test` by default for Rust repos; `:race gate-cmd <cmd>` overrides)
 - `race winner <idx> [force]` — gate the contestant, merge its branch, and clean up the losers; a failed gate blocks promotion unless `force` is given
 - `race cancel` — close all race panes and remove their worktrees
@@ -46,23 +46,23 @@ Type `:` to enter command mode.
 
 ## Headless
 
-Run `term --headless` (no TUI) to print machine-readable facts for scripts: registered agents, current branch, `git status` lines, and persisted tasks.
+Run `ridge --headless` (no TUI) to print machine-readable facts for scripts: registered agents, current branch, `git status` lines, and persisted tasks.
 
 ## Dashboard JSON
 
-Run `term --dashboard` (no TUI) to print the full mission-control state as pretty JSON: pane list (status/cost/attention/session id), active race with contestants and gate results, queued prompts, inbox counters, task-board summary with ready ids, module count, and race-history length.
+Run `ridge --dashboard` (no TUI) to print the full mission-control state as pretty JSON: pane list (status/cost/attention/session id), active race with contestants and gate results, queued prompts, inbox counters, task-board summary with ready ids, module count, and race-history length.
 
 ## Doctor
 
-Run `term --doctor` to sanity-check the environment and exit: each agent CLI found on PATH (claude, codex, opencode, gemini, copilot, aider, kimi, pi, grok, cursor-agent), git and gh availability, and that the data dir is writable. Exit code stays 0; missing items are reported with hints. Add `--fix` (`term --doctor --fix`) to print concrete copy-paste install steps (`→ [Agent] npm install -g …`) for every failing check.
+Run `ridge --doctor` to sanity-check the environment and exit: each agent CLI found on PATH (claude, codex, opencode, gemini, copilot, aider, kimi, pi, grok, cursor-agent), git and gh availability, and that the data dir is writable. Exit code stays 0; missing items are reported with hints. Add `--fix` (`ridge --doctor --fix`) to print concrete copy-paste install steps (`→ [Agent] npm install -g …`) for every failing check.
 
 ## Timelines
 
 Every pane's raw output is continuously logged under `<data_dir>/timelines/pane-<id>.log`. A companion `pane-<id>.meta` file records timestamped byte-offset milestones (every 4 KiB of activity or 30 s of silence) so post-mortems can be scrubbed over time:
 
 ```sh
-less ~/.local/share/term/timelines/pane-1.log     # raw session replay
-cat  ~/.local/share/term/timelines/pane-1.meta    # "epoch_ms bytes" milestones
+less ~/.local/share/ridge/timelines/pane-1.log     # raw session replay
+cat  ~/.local/share/ridge/timelines/pane-1.meta    # "epoch_ms bytes" milestones
 ```
 
-Inside Term, `:timeline view <pane>` opens a replay pane that streams the log live.
+Inside Ridge, `:timeline view <pane>` opens a replay pane that streams the log live.

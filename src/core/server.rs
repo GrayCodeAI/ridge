@@ -1,7 +1,7 @@
 //! Background server + detach/reattach (from Herdr).
 //!
-//! `term --server` runs a background daemon that owns the App state.
-//! `term --attach` connects as a thin TUI client. Sessions survive
+//! `ridge --server` runs a background daemon that owns the App state.
+//! `ridge --attach` connects as a thin TUI client. Sessions survive
 //! client disconnect — detach and reattach without losing panes or agents.
 
 use std::io::{Read, Write};
@@ -41,14 +41,14 @@ pub enum ClientToServer {
 
 /// Socket path for the background server.
 pub fn server_socket_path() -> std::path::PathBuf {
-    crate::config::data_dir().join("term-server.sock")
+    crate::config::data_dir().join("ridge-server.sock")
 }
 
 /// Attach to a running background server as a TUI client.
 pub fn attach_client() -> std::io::Result<()> {
     let path = server_socket_path();
     let mut stream = UnixStream::connect(&path)?;
-    eprintln!("term client: attached to {}", path.display());
+    eprintln!("ridge client: attached to {}", path.display());
 
     // Simple read-echo loop: read state updates from server, forward key input.
     let mut buf = [0u8; 65536];
@@ -97,7 +97,7 @@ pub fn start_server() -> std::io::Result<()> {
         crate::config::Config::load().map_err(|e| std::io::Error::other(e.to_string()))?,
     )));
     let listener = UnixListener::bind(&path)?;
-    eprintln!("term server: {}", path.display());
+    eprintln!("ridge server: {}", path.display());
 
     for stream in listener.incoming() {
         match stream {
@@ -206,6 +206,6 @@ mod tests {
     #[test]
     fn server_socket_path_under_data_dir() {
         let p = server_socket_path();
-        assert!(p.to_string_lossy().contains("term"));
+        assert!(p.to_string_lossy().contains("ridge"));
     }
 }

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Example Term module. Place in ~/.config/term/modules/ and chmod +x.
+# Example Ridge module. Place in ~/.config/ridge/modules/ and chmod +x.
 case "$1" in
   status)
     echo "hello from module"

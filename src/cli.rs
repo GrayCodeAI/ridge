@@ -1,7 +1,7 @@
 use clap::Parser;
 
 #[derive(Parser, Debug)]
-#[command(name = "term", version, about = "Mission control for your AI agents")]
+#[command(name = "ridge", version, about = "Mission control for your AI agents")]
 pub struct Cli {
     /// Working directory to start in.
     #[arg(short, long)]
@@ -43,7 +43,7 @@ pub struct Cli {
     #[arg(long)]
     pub web: bool,
 
-    /// Unix domain socket path to connect to a running `term --api` instance.
+    /// Unix domain socket path to connect to a running `ridge --api` instance.
     /// When used with --web, the dashboard shows real panes from the server.
     #[arg(long)]
     pub socket: Option<std::path::PathBuf>,

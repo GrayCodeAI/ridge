@@ -1,7 +1,7 @@
 id = "demo-module"
 name = "Demo Module"
 version = "1.0.0"
-description = "Example module demonstrating the Term module system"
+description = "Example module demonstrating the Ridge module system"
 platforms = ["linux", "macos"]
 
 # Startup hooks run when the module is loaded
@@ -19,7 +19,7 @@ command = ["echo", "Hello from demo-module!"]
 id = "show-panes"
 name = "Show Panes"
 description = "Lists active panes"
-command = ["sh", "-c", "echo 'Active panes: $TERM_JSON' | python3 -c 'import sys,json;d=json.load(sys.stdin);[print(f\"  {p}\") for p in range(d.get(\"panes\",0))]'"]
+command = ["sh", "-c", "echo 'Active panes: $RIDGE_JSON' | python3 -c 'import sys,json;d=json.load(sys.stdin);[print(f\"  {p}\") for p in range(d.get(\"panes\",0))]'"]
 
 # Event hooks fire on app events
 [[events]]

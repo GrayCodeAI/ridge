@@ -1,9 +1,9 @@
 # UHP 1.0 — Universal Harness Protocol
 
-Term implements the Universal Harness Protocol (UHP) 1.0, a versioned
+Ridge implements the Universal Harness Protocol (UHP) 1.0, a versioned
 method registry for orchestrators and external automation. UHP runs over
 the same Unix domain socket as the agent-native socket API
-(`term --api`), but uses JSON-RPC 2.0 method calls.
+(`ridge --api`), but uses JSON-RPC 2.0 method calls.
 
 ## Protocol
 
@@ -86,7 +86,7 @@ receive event objects when they fire.
 ```python
 import socket, json
 
-SOCK = "/home/user/.local/share/term/term.sock"
+SOCK = "/home/user/.local/share/ridge/ridge.sock"
 
 def uhp_call(method, params=None, id=1):
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)

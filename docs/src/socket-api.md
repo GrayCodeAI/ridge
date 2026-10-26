@@ -1,19 +1,19 @@
-# Socket API (`term --api`)
+# Socket API (`ridge --api`)
 
-Term can run as a background socket server, accepting JSON commands from
+Ridge can run as a background socket server, accepting JSON commands from
 external processes (agents, scripts, orchestrators). This is the same
 agent-native model used by Herdr.
 
 ## Start the Server
 
 ```bash
-term --api
+ridge --api
 ```
 
 This starts a Unix domain socket server at:
 
 ```
-~/.local/share/term/term.sock
+~/.local/share/ridge/ridge.sock
 ```
 
 ## Protocol
@@ -153,7 +153,7 @@ Close a pane by its ID.
 ```python
 import socket, json
 
-SOCK = "/home/user/.local/share/term/term.sock"
+SOCK = "/home/user/.local/share/ridge/ridge.sock"
 
 def send(cmd):
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -178,5 +178,5 @@ print(send({"cmd": "SendMessage", "pane": 1, "message": "hello"}))
 ```bash
 # Note: curl doesn't support Unix domain sockets on all versions.
 # Use socat or nc -U instead:
-echo '{"cmd": "ListPanes"}' | socat - UNIX-CONNECT:~/.local/share/term/term.sock
+echo '{"cmd": "ListPanes"}' | socat - UNIX-CONNECT:~/.local/share/ridge/ridge.sock
 ```

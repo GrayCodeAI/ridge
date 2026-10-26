@@ -18,9 +18,9 @@ use std::sync::{Arc, Mutex};
 #[cfg(unix)]
 use std::thread;
 
-/// Socket path under the term data dir.
+/// Socket path under the ridge data dir.
 pub fn socket_path() -> std::path::PathBuf {
-    crate::config::data_dir().join("term.sock")
+    crate::config::data_dir().join("ridge.sock")
 }
 
 /// Incoming API command.
@@ -159,7 +159,7 @@ pub fn start_server(app: Arc<Mutex<crate::app::App>>) -> std::io::Result<()> {
     }
     let _ = std::fs::remove_file(&path); // remove stale socket
     let listener = UnixListener::bind(&path)?;
-    eprintln!("term api socket: {}", path.display());
+    eprintln!("ridge api socket: {}", path.display());
     loop {
         let (stream, _) = listener.accept()?;
         let app = Arc::clone(&app);
@@ -175,7 +175,7 @@ pub fn start_server(app: Arc<Mutex<crate::app::App>>) -> std::io::Result<()> {
 pub fn start_server(_app: Arc<Mutex<crate::app::App>>) -> std::io::Result<()> {
     Err(std::io::Error::new(
         std::io::ErrorKind::Unsupported,
-        "term --api requires Unix-domain sockets (not available on Windows)",
+        "ridge --api requires Unix-domain sockets (not available on Windows)",
     ))
 }
 
@@ -186,6 +186,6 @@ mod tests {
     #[test]
     fn socket_path_under_data_dir() {
         let p = socket_path();
-        assert!(p.to_string_lossy().contains("term"));
+        assert!(p.to_string_lossy().contains("ridge"));
     }
 }
