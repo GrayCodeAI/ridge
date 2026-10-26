@@ -1,9 +1,9 @@
-//! Module system — Luvus-inspired extensibility for Term.
+//! Module system — Luvus-inspired extensibility for Ridge.
 //!
 //! Modules are executables or scripts dropped into
-//! `~/.config/term/modules/`. Each module can declare a
-//! `term-module.toml` manifest with actions, startup hooks, events,
-//! settings, and bar widgets. Modules receive `$TERM_JSON` (live app state)
+//! `~/.config/ridge/modules/`. Each module can declare a
+//! `ridge-module.toml` manifest with actions, startup hooks, events,
+//! settings, and bar widgets. Modules receive `$RIDGE_JSON` (live app state)
 //! on every tick and can register actions invokable from the commander or
 //! command mode.
 
@@ -31,7 +31,7 @@ pub fn discover() -> Vec<PathBuf> {
     out
 }
 
-/// Run a module script with the `status` command and `$TERM_JSON` env.
+/// Run a module script with the `status` command and `$RIDGE_JSON` env.
 /// Returns (module_name, output_text).
 pub fn run_module(path: &PathBuf, json: &str) -> (String, String) {
     let name = path
@@ -40,6 +40,7 @@ pub fn run_module(path: &PathBuf, json: &str) -> (String, String) {
         .unwrap_or_default();
     match std::process::Command::new(path)
         .arg("status")
+        .env("RIDGE_JSON", json)
         .env("TERM_JSON", json)
         .output()
     {
@@ -59,7 +60,7 @@ pub fn run_all(json: &str) -> Vec<(String, String)> {
         .collect()
 }
 
-/// `term-module.toml` manifest — declarative module definition.
+/// `ridge-module.toml` manifest — declarative module definition.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ModuleManifest {
     pub id: String,
@@ -187,12 +188,11 @@ pub struct WorktreeProviderResponse {
     pub error: Option<String>,
 }
 
-/// Load a module manifest from a directory (looks for term-module.toml).
+/// Load a module manifest from a directory (looks for ridge-module.toml).
 pub fn load_manifest(module_dir: &Path) -> Option<ModuleManifest> {
-    let manifest_path = module_dir.join("term-module.toml");
-    if !manifest_path.exists() {
-        return None;
-    }
+    let current = module_dir.join("ridge-module.toml");
+    let legacy = module_dir.join("term-module.toml");
+    let manifest_path = if current.exists() { current } else { legacy };
     let raw = std::fs::read_to_string(&manifest_path).ok()?;
     toml::from_str(&raw).ok()
 }
@@ -451,8 +451,16 @@ mod tests {
     #[test]
     fn modules_dir_path() {
         let d = modules_dir();
-        assert!(d.to_string_lossy().contains("term"));
-        assert!(d.to_string_lossy().contains("modules"));
+        assert_eq!(
+            d.file_name().and_then(|name| name.to_str()),
+            Some("modules")
+        );
+        assert!(matches!(
+            d.parent()
+                .and_then(|parent| parent.file_name())
+                .and_then(|name| name.to_str()),
+            Some("ridge" | "term")
+        ));
     }
 
     #[test]

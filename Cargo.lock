@@ -1540,7 +1540,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "term"
+name = "ridge"
 version = "1.0.0"
 dependencies = [
  "anyhow",

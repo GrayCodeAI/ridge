@@ -191,7 +191,7 @@ impl UhpcServer {
     pub fn start(self) -> std::io::Result<()> {
         Err(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
-            "term --uhp requires Unix-domain sockets (not available on Windows)",
+            "ridge --uhp requires Unix-domain sockets (not available on Windows)",
         ))
     }
 }

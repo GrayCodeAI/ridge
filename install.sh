@@ -1,11 +1,11 @@
 #!/bin/sh
-# Install Term — mission control for your AI agents.
-# Usage: curl -fsSL https://gryacodeai.com/term/install.sh | sh
+# Install Ridge — mission control for your AI agents.
+# Usage: curl -fsSL https://raw.githubusercontent.com/GrayCodeAI/ridge/main/install.sh | sh
 set -eu
 
-REPO="GrayCodeAI/term"
-BIN="term"
-INSTALL_DIR="${TERM_INSTALL_DIR:-$HOME/.local/bin}"
+REPO="GrayCodeAI/ridge"
+BIN="ridge"
+INSTALL_DIR="${RIDGE_INSTALL_DIR:-$HOME/.local/bin}"
 
 OS="$(uname -s)"
 ARCH="$(uname -m)"
@@ -26,23 +26,26 @@ else
   TARGET="${ARCH_SLUG}-${OS_SLUG}"
 fi
 
-TAG="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest"   | sed -n 's/.*"tag_name": *"\([^"]*\)".*//p')"
+TAG="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p')"
 if [ -z "$TAG" ]; then
   echo "Could not determine latest release." >&2
   exit 1
 fi
 
-URL="https://github.com/${REPO}/releases/download/${TAG}/term-${TARGET}.tar.gz"
-echo "Downloading Term ${TAG} (${TARGET})..."
+URL="https://github.com/${REPO}/releases/download/${TAG}/ridge-${TARGET}.tar.gz"
+echo "Downloading Ridge ${TAG} (${TARGET})..."
 mkdir -p "$INSTALL_DIR"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-curl -fsSL "$URL" -o "$TMP/term.tar.gz"
-tar xzf "$TMP/term.tar.gz" -C "$TMP"
-install -m 0755 "$TMP/term" "$INSTALL_DIR/$BIN"
+if ! curl -fsSL "$URL" -o "$TMP/ridge.tar.gz"; then
+  echo "No Ridge release asset found. Build from source: cargo install --git https://github.com/GrayCodeAI/ridge" >&2
+  exit 1
+fi
+tar xzf "$TMP/ridge.tar.gz" -C "$TMP"
+install -m 0755 "$TMP/ridge" "$INSTALL_DIR/$BIN"
 
 echo "Installed $BIN to $INSTALL_DIR/$BIN"
 case ":$PATH:" in
   *":$INSTALL_DIR:"*) ;;
-  *) echo "Add $INSTALL_DIR to your PATH to use 'term'." ;;
+  *) echo "Add $INSTALL_DIR to your PATH to use 'ridge'." ;;
 esac

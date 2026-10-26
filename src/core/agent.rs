@@ -96,6 +96,7 @@ impl AgentRegistry {
         reg.register(Box::new(crate::agents::pi::PiAgent));
         reg.register(Box::new(crate::agents::grok::GrokAgent));
         reg.register(Box::new(crate::agents::cursor::CursorAgent));
+        reg.register(Box::new(crate::agents::reflect::ReflectAgent));
         reg.register(Box::new(crate::agents::generic::GenericAgent));
         reg
     }

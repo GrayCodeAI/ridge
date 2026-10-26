@@ -50,7 +50,7 @@ pub fn read_clipboard_image() -> Result<Vec<u8>, String> {
     }
 }
 
-/// Write clipboard image data to a file in the term data dir.
+/// Write clipboard image data to a file in the ridge data dir.
 /// Returns the file path.
 pub fn save_clipboard_image(data: &[u8]) -> Result<std::path::PathBuf, String> {
     let dir = crate::config::data_dir().join("clipboard");

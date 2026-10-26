@@ -1,4 +1,4 @@
-//! `term --doctor`: environment sanity checks (agent binaries on PATH, git,
+//! `ridge --doctor`: environment sanity checks (agent binaries on PATH, git,
 //! gh, writable data dir) printed as a plain report, then exit.
 
 use crate::core::agent::AgentRegistry;
@@ -127,7 +127,7 @@ pub fn run_checks(registry: &AgentRegistry) -> Vec<Check> {
 
 /// CLI entry: print the report; with `fix`, add copy-paste suggestions.
 pub fn run_cli_checks(with_fix: bool) {
-    println!("term doctor — environment checks\n");
+    println!("ridge doctor — environment checks\n");
     let registry = AgentRegistry::new();
     let checks = run_checks(&registry);
     let mut missing = 0usize;
@@ -143,7 +143,7 @@ pub fn run_cli_checks(with_fix: bool) {
         println!("all good ✓ — agents, tools, and data dir are ready");
     } else {
         println!(
-            "{missing} check{} need{} attention above; Term still runs with the rest",
+            "{missing} check{} need{} attention above; Ridge still runs with the rest",
             if missing == 1 { "" } else { "s" },
             if missing == 1 { "s" } else { "" }
         );
@@ -155,7 +155,7 @@ pub fn run_cli_checks(with_fix: bool) {
                 }
             }
         } else {
-            println!("hint: rerun with `term --doctor --fix` for copy-paste install steps,");
+            println!("hint: rerun with `ridge --doctor --fix` for copy-paste install steps,");
             println!("      or use `spawn generic` / shell panes for missing agents.");
         }
     }
@@ -168,7 +168,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn finds_executable_in_path_in() {
-        let dir = std::env::temp_dir().join("term-doctor-bin");
+        let dir = std::env::temp_dir().join("ridge-doctor-bin");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let fake = dir.join("fake-agent");
@@ -191,8 +191,8 @@ mod tests {
     fn run_checks_lists_tools_and_agents() {
         let registry = AgentRegistry::new();
         let checks = run_checks(&registry);
-        // 10 real agents + git + gh + data dir (generic has no exe → skipped)
-        assert_eq!(checks.len(), 10 + 3);
+        // 11 real agents + git + gh + data dir (generic has no exe → skipped)
+        assert_eq!(checks.len(), 11 + 3);
         assert!(checks.iter().any(|c| c.name == "git"));
         let git = checks.iter().find(|c| c.name == "git").unwrap();
         assert!(git.ok, "git is required in CI and dev environments");

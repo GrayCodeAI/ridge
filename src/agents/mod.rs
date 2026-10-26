@@ -9,6 +9,7 @@ pub mod grok;
 pub mod kimi;
 pub mod opencode;
 pub mod pi;
+pub mod reflect;
 
 #[cfg(test)]
 mod detect_tests {
@@ -26,7 +27,7 @@ mod detect_tests {
         use crate::agents::{
             aider::AiderAgent, claude::ClaudeAgent, codex::CodexAgent, copilot::CopilotAgent,
             cursor::CursorAgent, gemini::GeminiAgent, grok::GrokAgent, kimi::KimiAgent,
-            opencode::OpenCodeAgent, pi::PiAgent,
+            opencode::OpenCodeAgent, pi::PiAgent, reflect::ReflectAgent,
         };
 
         // (detect function, matching process name, matching cmdline)
@@ -78,6 +79,11 @@ mod detect_tests {
                 "cursor-agent",
                 "cursor-agent -p x",
             ),
+            (
+                Box::new(|p, c| ReflectAgent.detect(p, c)),
+                "reflect",
+                "reflect work",
+            ),
         ];
         for (f, proc_name, cmdline) in &cases {
             assert!(
@@ -90,7 +96,7 @@ mod detect_tests {
     #[test]
     fn registry_returns_all_adapters() {
         let r = crate::core::agent::AgentRegistry::new();
-        assert_eq!(r.all().len(), 11);
-        assert_eq!(r.all()[10].id(), "generic"); // generic always last (fallback)
+        assert_eq!(r.all().len(), 12);
+        assert_eq!(r.all()[11].id(), "generic"); // generic always last (fallback)
     }
 }

@@ -1,18 +1,18 @@
-# Term — Product Plan
+# Ridge — Product Plan
 
 > Mission control for your AI agents. Terminal-native TUI. Part of Gryacodeai.com.
 
 ## 1. Vision & Positioning
 
-**Term** is a Rust TUI that gives you one place to run, watch, resume, and orchestrate every coding agent — without leaving your terminal or breaking SSH/mobile workflows.
+**Ridge** is a Rust TUI that gives you one place to run, watch, resume, and orchestrate every coding agent — without leaving your terminal or breaking SSH/mobile workflows.
 
 **Positioning vs. the field:**
 - vs. **tmux/Zellij**: adds agent-aware state, cost tracking, git/diff/files, orchestration
-- vs. **Luvus**: similar scope, but Term is the Gryacodeai-branded, open-source take with a cleaner module system
+- vs. **Luvus**: similar scope, but Ridge is the Gryacodeai-branded, open-source take with a cleaner module system
 - vs. **Herdr**: broader (not just runtime state — full mission control)
 - vs. **Orca/cmux**: terminal-native, no GUI lock-in, SSH-first
 
-**Tagline:** "Term — mission control for your AI agents."
+**Tagline:** "Ridge — mission control for your AI agents."
 
 ## 2. Target Users
 
@@ -28,16 +28,16 @@
 - **Async runtime:** tokio
 - **PTY:** portable-pty
 - **Git:** git2 (libgit2 bindings) + shelling out to `git`/`gh` where needed
-- **Config:** serde + toml (`~/.config/term/term.toml`)
+- **Config:** serde + toml (`~/.config/ridge/ridge.toml`)
 - **State persistence:** SQLite (rusqlite) for sessions/workspaces, or JSON files for v0.1
 - **CLI args:** clap
 - **Logging:** tracing
-- **Distribution:** single static binary via `cargo build --release`, plus `cargo install term`
+- **Distribution:** single static binary via `cargo build --release`, plus `cargo install ridge`
 
 ## 4. Architecture
 
 ```
-term/
+ridge/
 ├── src/
 │   ├── main.rs              # entrypoint, CLI (clap)
 │   ├── app.rs               # top-level App state + event loop
@@ -183,7 +183,7 @@ Even though v0.1 target is "full mission control", ship in phases to stay sane:
 
 ### Phase 6 — Release
 - README, docs, install script (`curl … | sh`)
-- crates.io publish (`cargo install term`)
+- crates.io publish (`cargo install ridge`)
 - GitHub releases with prebuilt binaries (Linux/macOS/Windows)
 - Homebrew tap
 
@@ -231,12 +231,12 @@ Even though v0.1 target is "full mission control", ship in phases to stay sane:
 - [ ] Review a diff and send line comments to an agent
 - [ ] Create a task → worktree → pane → quality gate → merge flow end-to-end
 - [ ] Works over SSH from a phone (mobile-width mode)
-- [ ] Single binary, `cargo install term` works
+- [ ] Single binary, `cargo install ridge` works
 - [ ] README + install script + docs
 
 ## 11. Next Steps
 
-1. Create repo `term` under your GitHub account
+1. Create repo `ridge` under your GitHub account
 2. Scaffold Cargo project (Phase 0)
 3. Implement PTY + agent detection (Phase 1)
 4. Iterate

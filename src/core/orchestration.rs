@@ -89,17 +89,19 @@ impl TaskBoard {
         self.next_id = id;
     }
 
-    /// Persist the board to `<repo>/.term-tasks.json`.
+    /// Persist the board to `<repo>/.ridge-tasks.json`.
     pub fn save(&self, repo: &Path) -> Result<(), String> {
-        let path = repo.join(".term-tasks.json");
+        let path = repo.join(".ridge-tasks.json");
         let json = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
         std::fs::write(&path, json).map_err(|e| e.to_string())?;
         Ok(())
     }
 
-    /// Load a board from `<repo>/.term-tasks.json`, or a fresh one.
+    /// Load a board from `<repo>/.ridge-tasks.json`, or a fresh one.
     pub fn load(repo: &Path) -> TaskBoard {
-        let path = repo.join(".term-tasks.json");
+        let current = repo.join(".ridge-tasks.json");
+        let legacy = repo.join(".term-tasks.json");
+        let path = if current.exists() { current } else { legacy };
         if let Ok(s) = std::fs::read_to_string(&path) {
             if let Ok(board) = serde_json::from_str::<TaskBoard>(&s) {
                 return board;
@@ -190,7 +192,7 @@ impl TaskBoard {
         if task.status != TaskStatus::Pending {
             return Err("not pending".into());
         }
-        let branch = format!("term/task-{id}");
+        let branch = format!("ridge/task-{id}");
         let base = worktree::worktree_base(repo);
         let _ = std::fs::create_dir_all(&base);
         let path = base.join(format!("task-{id}"));
@@ -448,7 +450,7 @@ mod notes_tests {
 
     #[test]
     fn notes_survive_save_load() {
-        let dir = std::env::temp_dir().join("term-notes-roundtrip");
+        let dir = std::env::temp_dir().join("ridge-notes-roundtrip");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let mut b = TaskBoard::default();
@@ -508,7 +510,7 @@ mod checklist_tests {
 
     #[test]
     fn checklist_survives_persistence() {
-        let dir = std::env::temp_dir().join("term-checklist-roundtrip");
+        let dir = std::env::temp_dir().join("ridge-checklist-roundtrip");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let mut b = TaskBoard::default();

@@ -28,7 +28,10 @@ coverage/
 .cargo/vendor/
 *.rs.bak
 
-# Term application data
+# Ridge application data
+.ridge/
+.ridge-*.json
+.ridge-worktrees/
 .term/
 .term-*.json
 .term-worktrees/

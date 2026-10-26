@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# term install script
-# Installs the Term TUI mission control for AI agents.
+# ridge install script
+# Installs the Ridge TUI mission control for AI agents.
 set -euo pipefail
 
-VERSION="${TERM_VERSION:-1.0.0}"
-REPO="GrayCodeAI/term"
-BINARY_NAME="term"
+VERSION="${RIDGE_VERSION:-1.0.0}"
+REPO="GrayCodeAI/ridge"
+BINARY_NAME="ridge"
 
 # Detect platform
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
@@ -24,14 +24,14 @@ case "$OS" in
 esac
 
 # Determine install dir
-INSTALL_DIR="${TERM_INSTALL_DIR:-$HOME/.local/bin}"
+INSTALL_DIR="${RIDGE_INSTALL_DIR:-$HOME/.local/bin}"
 mkdir -p "$INSTALL_DIR"
 
 # Download from GitHub releases
-ASSET_NAME="term-${VERSION}-${PLATFORM}.tar.gz"
+ASSET_NAME="ridge-${PLATFORM}.tar.gz"
 DOWNLOAD_URL="https://github.com/${REPO}/releases/download/v${VERSION}/${ASSET_NAME}"
 
-echo "Downloading term ${VERSION} for ${PLATFORM}..."
+echo "Downloading ridge ${VERSION} for ${PLATFORM}..."
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 
@@ -47,20 +47,20 @@ tar -xzf "$TMPDIR/$ASSET_NAME" -C "$TMPDIR"
 
 # Find the binary
 BIN_PATH=""
-if [ -f "$TMPDIR/term" ]; then
-  BIN_PATH="$TMPDIR/term"
-elif [ -f "$TMPDIR/term-${VERSION}-${PLATFORM}/term" ]; then
-  BIN_PATH="$TMPDIR/term-${VERSION}-${PLATFORM}/term"
+if [ -f "$TMPDIR/ridge" ]; then
+  BIN_PATH="$TMPDIR/ridge"
+elif [ -f "$TMPDIR/ridge-${VERSION}-${PLATFORM}/ridge" ]; then
+  BIN_PATH="$TMPDIR/ridge-${VERSION}-${PLATFORM}/ridge"
 else
-  echo "Could not find term binary in archive" >&2; exit 1
+  echo "Could not find ridge binary in archive" >&2; exit 1
 fi
 
-cp "$BIN_PATH" "$INSTALL_DIR/term"
-chmod +x "$INSTALL_DIR/term"
+cp "$BIN_PATH" "$INSTALL_DIR/ridge"
+chmod +x "$INSTALL_DIR/ridge"
 
-echo "Installed term to $INSTALL_DIR/term"
+echo "Installed ridge to $INSTALL_DIR/ridge"
 echo ""
 echo "Add $INSTALL_DIR to your PATH if it's not already:"
 echo "  export PATH=\"$INSTALL_DIR:\$PATH\""
 echo ""
-echo "Run 'term --help' to get started."
+echo "Run 'ridge --help' to get started."

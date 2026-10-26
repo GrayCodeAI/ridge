@@ -2,16 +2,10 @@
 
 ## From source
 ```sh
-cargo install --git https://github.com/GrayCodeAI/term
+cargo install --git https://github.com/GrayCodeAI/ridge
 ```
 
-## Install script
+## Install script (after the first Ridge release)
 ```sh
-curl -fsSL https://gryacodeai.com/term/install.sh | sh
-```
-
-## Homebrew
-```sh
-brew tap GrayCodeAI/tap
-brew install term
+curl -fsSL https://raw.githubusercontent.com/GrayCodeAI/ridge/main/install.sh | sh
 ```

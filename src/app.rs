@@ -234,7 +234,7 @@ impl App {
             config,
             current_tab: Tab::Agents,
             should_quit: false,
-            status_message: "Term — mission control for your AI agents".to_string(),
+            status_message: "Ridge — mission control for your AI agents".to_string(),
             tick_count: 0,
             registry: AgentRegistry::new(),
             panes: Vec::new(),
@@ -427,7 +427,7 @@ impl App {
         lines
     }
 
-    /// Machine-readable dashboard state for `term --dashboard`.
+    /// Machine-readable dashboard state for `ridge --dashboard`.
     pub fn dashboard_json(&self) -> String {
         use serde_json::json;
         let panes: Vec<_> = self
@@ -687,7 +687,7 @@ impl App {
         }
     }
 
-    /// Compact summary of live state, exposed to modules via $TERM_JSON.
+    /// Compact summary of live state, exposed to modules via $RIDGE_JSON.
     pub fn module_state_json(&self) -> String {
         let panes = self.panes.len();
         let blocked = self
@@ -1417,7 +1417,7 @@ impl App {
                                 p.cost_usd
                             ));
                         }
-                        let path = self.cwd.join("term-costs.csv");
+                        let path = self.cwd.join("ridge-costs.csv");
                         match std::fs::write(&path, csv) {
                             Ok(()) => {
                                 self.status_message =
@@ -1427,7 +1427,7 @@ impl App {
                         }
                     } else if parts.len() >= 3 && parts[2] == "session" {
                         // export session <path> — snapshot of open panes as JSON
-                        let file = parts.get(3).copied().unwrap_or("term-session.json");
+                        let file = parts.get(3).copied().unwrap_or("ridge-session.json");
                         let panes: Vec<crate::app::PaneSnapshot> = self
                             .panes
                             .iter()
@@ -1836,7 +1836,7 @@ impl App {
                         Err(e) => self.status_message = format!("plugin remove failed: {e}"),
                     }
                 } else if parts.len() >= 2 && parts[1] == "marketplace" {
-                    self.status_message = "plugin marketplace: https://github.com/GrayCodeAI/term-plugins\n  :plugin install <url> [name]  — install from any URL\n  :plugin list                  — list installed plugins\n  :plugin remove <name>         — remove a plugin".to_string();
+                    self.status_message = "Plugins:\n  :plugin install <url> [name]  — install from a URL\n  :plugin list                  — list installed plugins\n  :plugin remove <name>         — remove a plugin".to_string();
                 } else {
                     self.status_message =
                         "usage: plugin list | install <url> [name] | remove <name> | marketplace"
@@ -2246,8 +2246,8 @@ pub struct PaneSnapshot {
     pub title: String,
 }
 
-/// Persist open panes (agent ids + titles) to ~/.local/share/term/session.json
-/// so `term --restore` can bring them back by resuming each agent's last session.
+/// Persist open panes (agent ids + titles) to ~/.local/share/ridge/session.json
+/// so `ridge --restore` can bring them back by resuming each agent's last session.
 pub fn save_session_file(app: &App) {
     let dir = crate::config::data_dir();
     if std::fs::create_dir_all(&dir).is_err() {
@@ -2429,7 +2429,7 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
                         } else {
                             "finished"
                         };
-                        crate::core::notify::alert(&format!("Term — {}", pane.title), why);
+                        crate::core::notify::alert(&format!("Ridge — {}", pane.title), why);
                     }
                 }
                 pane.status = new_status;
@@ -2439,7 +2439,7 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
                         attention_hits += 1;
                         if hooks_on {
                             crate::core::notify::alert(
-                                &format!("Term — {}", pane.title),
+                                &format!("Ridge — {}", pane.title),
                                 "session ended",
                             );
                         }
@@ -2500,7 +2500,7 @@ pub async fn run(config: Config, cli: Cli) -> Result<()> {
         }
     }
 
-    // Persist open panes so the next `term --restore` can bring them back.
+    // Persist open panes so the next `ridge --restore` can bring them back.
     save_session_file(&app);
 
     disable_raw_mode()?;
@@ -3084,7 +3084,7 @@ mod race_gate_tests {
     use std::process::Command;
 
     fn make_repo(suffix: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("term-race-gate-repo-{suffix}"));
+        let dir = std::env::temp_dir().join(format!("ridge-race-gate-repo-{suffix}"));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         for c in [
@@ -3183,7 +3183,7 @@ mod race_gate_tests {
 
     #[test]
     fn default_gate_cmd_heuristic() {
-        let dir = std::env::temp_dir().join("term-gate-heur");
+        let dir = std::env::temp_dir().join("ridge-gate-heur");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         assert_eq!(default_gate_cmd(&dir), "true");
@@ -3308,7 +3308,7 @@ mod race_history_tests {
     use std::process::Command;
 
     fn make_repo(suffix: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("term-race-history-{suffix}"));
+        let dir = std::env::temp_dir().join(format!("ridge-race-history-{suffix}"));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         for c in [
@@ -3389,7 +3389,7 @@ mod check_command_tests {
     use std::process::Command;
 
     fn quiet_repo(suffix: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("term-check-cmd-{suffix}"));
+        let dir = std::env::temp_dir().join(format!("ridge-check-cmd-{suffix}"));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         for c in [
@@ -3648,7 +3648,7 @@ mod dashboard_json_tests {
 
     #[test]
     fn timelines_tick_writes_pane_log() {
-        let base = std::env::temp_dir().join(format!("term-timeline-base-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("ridge-timeline-base-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
 
         let mut a = App::new(Config::default());
@@ -3770,7 +3770,7 @@ mod dashboard_json_tests {
     #[test]
     #[cfg(unix)]
     fn timeline_view_opens_replaying_pane() {
-        let base = std::env::temp_dir().join(format!("term-timeline-view-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("ridge-timeline-view-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
 
         let mut a = App::new(Config::default());

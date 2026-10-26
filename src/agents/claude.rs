@@ -132,7 +132,7 @@ mod extra_tests {
 
     #[test]
     fn parse_cost_from_jsonl() {
-        let dir = std::env::temp_dir().join("term-claude-test");
+        let dir = std::env::temp_dir().join("ridge-claude-test");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("session.jsonl");

@@ -1,12 +1,12 @@
-# Contributing to Term
+# Contributing to Ridge
 
-Thank you for considering contributing to Term! We welcome bug reports, feature
+Thank you for considering contributing to Ridge! We welcome bug reports, feature
 requests, and pull requests from the community.
 
 ## Getting Started
 
 1. Fork the repository on GitHub.
-2. Clone your fork: `git clone https://github.com/<your-username>/term.git`
+2. Clone your fork: `git clone https://github.com/<your-username>/ridge.git`
 3. Create a feature branch: `git checkout -b feature/your-feature-name`
 4. Install Rust: https://rustup.rs/
 5. Build: `cargo build`
@@ -27,7 +27,7 @@ requests, and pull requests from the community.
 ## Pull Request Process
 
 1. Push your branch to your fork.
-2. Open a pull request against `main` on `GrayCodeAI/term`.
+2. Open a pull request against `main` on `GrayCodeAI/ridge`.
 3. A maintainer will review your changes and may request changes.
 4. Once approved, a maintainer will merge your pull request.
 
@@ -40,7 +40,7 @@ requests, and pull requests from the community.
 
 ## Reporting Bugs
 
-Open an issue at https://github.com/GrayCodeAI/term/issues with:
+Open an issue at https://github.com/GrayCodeAI/ridge/issues with:
 
 - A clear title and description
 - Steps to reproduce

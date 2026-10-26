@@ -11,7 +11,14 @@ static DB_COUNTER: AtomicU64 = AtomicU64::new(0);
 type StoreResult<T> = Result<T, String>;
 
 pub fn db_path() -> PathBuf {
-    crate::config::data_dir().join("term.db")
+    let dir = crate::config::data_dir();
+    let current = dir.join("ridge.db");
+    let legacy = dir.join("term.db");
+    if !current.exists() && legacy.exists() {
+        legacy
+    } else {
+        current
+    }
 }
 
 fn open_db_at(path: PathBuf) -> StoreResult<Db> {
@@ -37,7 +44,7 @@ pub fn open_db() -> StoreResult<Db> {
             // Fall back to temp dir with unique name per call
             // (avoids sled lock conflicts when running multiple instances)
             let tmp_path = std::env::temp_dir().join(format!(
-                "term-{}-{}.db",
+                "ridge-{}-{}.db",
                 std::process::id(),
                 DB_COUNTER.fetch_add(1, Ordering::Relaxed)
             ));
@@ -60,7 +67,7 @@ pub fn open_db() -> StoreResult<Db> {
 #[cfg(test)]
 pub fn open_db() -> StoreResult<Db> {
     let path = std::env::temp_dir().join(format!(
-        "term-test-{}-{}.db",
+        "ridge-test-{}-{}.db",
         std::process::id(),
         DB_COUNTER.fetch_add(1, Ordering::Relaxed)
     ));
