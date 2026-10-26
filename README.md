@@ -10,7 +10,7 @@ Mission control for your AI agents. Terminal-native TUI. Part of [GrayCodeAI](ht
 
 ## Status
 
-Full mission control: 11 agent adapters (Claude, Codex, OpenCode, Gemini, Copilot, Aider, Kimi, Pi, Grok, Cursor, Generic), PTY terminal emulation, task orchestration with worktrees/leases/quality-gates/merge, session persistence, cost tracking, modules, themes, and mobile-width mode. 23 tests, CI on 3 OS. See `CHANGELOG.md`.
+Full mission control: 12 agent adapters (Reflect, Claude, Codex, OpenCode, Gemini, Copilot, Aider, Kimi, Pi, Grok, Cursor, Generic), PTY terminal emulation, task orchestration with worktrees/leases/quality-gates/merge, session persistence, cost tracking, modules, themes, and mobile-width mode. See `CHANGELOG.md`.
 
 ## Docs
 

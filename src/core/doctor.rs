@@ -191,8 +191,8 @@ mod tests {
     fn run_checks_lists_tools_and_agents() {
         let registry = AgentRegistry::new();
         let checks = run_checks(&registry);
-        // 10 real agents + git + gh + data dir (generic has no exe → skipped)
-        assert_eq!(checks.len(), 10 + 3);
+        // 11 real agents + git + gh + data dir (generic has no exe → skipped)
+        assert_eq!(checks.len(), 11 + 3);
         assert!(checks.iter().any(|c| c.name == "git"));
         let git = checks.iter().find(|c| c.name == "git").unwrap();
         assert!(git.ok, "git is required in CI and dev environments");

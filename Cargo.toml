@@ -2,7 +2,7 @@
 name = "term"
 version = "1.0.0"
 edition = "2024"
-description = "Mission control for your AI agents. Terminal-native TUI with 11 agent adapters, task orchestration, diff review, and session management."
+description = "Mission control for your AI agents. Terminal-native TUI with 12 agent adapters, task orchestration, diff review, and session management."
 license = "MIT"
 repository = "https://github.com/GrayCodeAI/term"
 homepage = "https://github.com/GrayCodeAI/term"
