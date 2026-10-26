@@ -40,7 +40,7 @@ cargo run
 # From source
 cargo install --path .
 
-# Via install script
+# Via install script (after the first Ridge release)
 curl -fsSL https://raw.githubusercontent.com/GrayCodeAI/ridge/main/install.sh | sh
 
 # or restore last session's panes

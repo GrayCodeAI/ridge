@@ -37,7 +37,10 @@ echo "Downloading Ridge ${TAG} (${TARGET})..."
 mkdir -p "$INSTALL_DIR"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-curl -fsSL "$URL" -o "$TMP/ridge.tar.gz"
+if ! curl -fsSL "$URL" -o "$TMP/ridge.tar.gz"; then
+  echo "No Ridge release asset found. Build from source: cargo install --git https://github.com/GrayCodeAI/ridge" >&2
+  exit 1
+fi
 tar xzf "$TMP/ridge.tar.gz" -C "$TMP"
 install -m 0755 "$TMP/ridge" "$INSTALL_DIR/$BIN"
 

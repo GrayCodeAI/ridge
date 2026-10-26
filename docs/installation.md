@@ -5,7 +5,7 @@
 cargo install --git https://github.com/GrayCodeAI/ridge
 ```
 
-## Install script
+## Install script (after the first Ridge release)
 ```sh
 curl -fsSL https://raw.githubusercontent.com/GrayCodeAI/ridge/main/install.sh | sh
 ```
