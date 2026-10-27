@@ -1,5 +1,20 @@
 # Ridge
 
+## Software factory
+
+With the GrayCode factory binaries on `PATH`, open Ridge in a project and run
+`:factory status`. The Dashboard then shows the same ticket and evidence
+summary as `reflect factory summary --repo .`. Run `:factory run <request>` to
+start a new verified Reflect work run in a pane, or `:factory ticket <id>` to
+work an existing Resolve ticket. Both commands use `reflect factory run`, which
+chooses a test command from the project's manifest and records its Rivet log.
+For a different check, run `reflect factory run --verify '<command>'` directly
+in a terminal pane.
+
+The factory command leaves the branch and checkpoint for review; it does not
+merge or publish changes automatically. Build the sibling CLIs with
+`../reflect/scripts/factory-setup.sh`, then add its output directory to `PATH`.
+
 Mission control for your AI agents. Terminal-native TUI. Part of [GrayCodeAI](https://github.com/GrayCodeAI).
 
 Formerly **Term**. The command and package are now `ridge`. Existing Term configuration, session data, task boards, race history, worktrees, and module manifests are read when their Ridge equivalents do not exist.

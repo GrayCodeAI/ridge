@@ -186,6 +186,8 @@ pub struct App {
     pub files_status: std::collections::HashMap<String, char>,
 
     pub module_outputs: Vec<(String, String)>,
+    /// Last local Reflect factory summary, refreshed on demand.
+    pub factory_status: Option<String>,
 
     /// Inter-session reply inbox (delegations + captured agent replies).
     pub inbox: crate::core::inbox::Inbox,
@@ -266,6 +268,7 @@ impl App {
             split_bottom: None,
 
             module_outputs: Vec::new(),
+            factory_status: None,
             inbox: crate::core::inbox::Inbox::new(),
             show_inbox: false,
             queue: crate::core::queue::Queue::new(),
@@ -422,6 +425,13 @@ impl App {
             ready
         ));
 
+        // Factory
+        lines.push(
+            self.factory_status
+                .clone()
+                .unwrap_or_else(|| "Factory: :factory status to load ticket progress".to_string()),
+        );
+
         // Modules
         lines.push(format!("Modules: {} outputs", self.module_outputs.len()));
         lines
@@ -481,6 +491,7 @@ impl App {
             "inbox": {"unread": self.inbox.unread_count(), "total": self.inbox.items.len()},
             "tasks": board_summary,
             "modules": self.module_outputs.len(),
+            "factory": self.factory_status,
             "race_history": self.race_history.records.len(),
         });
         serde_json::to_string_pretty(&out).unwrap_or_else(|_| "{}".to_string())
@@ -871,6 +882,41 @@ impl App {
         }
     }
 
+    fn spawn_factory(&mut self, request: &str, existing_ticket: bool) {
+        let request = request.trim();
+        if request.is_empty() {
+            self.status_message = "factory needs a request or ticket ID".to_string();
+            return;
+        }
+        let mut command = portable_pty::CommandBuilder::new("reflect");
+        command.arg("factory");
+        command.arg("run");
+        command.arg("--repo");
+        command.arg(self.cwd.as_os_str());
+        if existing_ticket {
+            command.arg(request);
+        } else {
+            command.arg("--request");
+            command.arg(request);
+        }
+        command.cwd(&self.cwd);
+        match PtySession::spawn(command, 24, 80) {
+            Ok(pty) => {
+                let id = self.next_pane_id;
+                self.next_pane_id += 1;
+                let mut pane = Pane::new(id, format!("Factory #{id}"));
+                pane.agent_id = Some("reflect".to_string());
+                pane.pty = Some(pty);
+                pane.status = AgentStatus::Working;
+                self.panes.push(pane);
+                self.active_pane = self.panes.len() - 1;
+                self.assign_pane_to_workspace(id);
+                self.status_message = format!("factory started in pane {id}");
+            }
+            Err(error) => self.status_message = format!("factory start failed: {error}"),
+        }
+    }
+
     pub fn active_pane(&self) -> Option<&Pane> {
         self.panes.get(self.active_pane)
     }
@@ -1142,6 +1188,25 @@ impl App {
             return;
         }
         match parts[0] {
+            "factory" => match parts.get(1).copied() {
+                Some("status") => match crate::core::factory::summary(&self.cwd) {
+                    Ok(summary) => {
+                        self.factory_status = Some(summary.clone());
+                        self.status_message = summary;
+                    }
+                    Err(error) => self.status_message = format!("factory status failed: {error}"),
+                },
+                Some("run") => {
+                    self.spawn_factory(&parts[2..].join(" "), false);
+                }
+                Some("ticket") => {
+                    self.spawn_factory(&parts[2..].join(" "), true);
+                }
+                _ => {
+                    self.status_message =
+                        "usage: factory status | run <request> | ticket <id>".to_string()
+                }
+            },
             "spawn" => {
                 let agent = parts.get(1).copied().unwrap_or("claude");
                 let cwd = self.cwd.clone();
@@ -1965,7 +2030,7 @@ impl App {
             }
             "help" => {
                 self.status_message =
-                    "commands: spawn <agent>, close, delegate <pane> <msg>, broadcast <msg>, session save/clear, export costs/session, module list/install <url> [name]/remove <name>/run <action_id>, ssh <host>, account list/add/env/show, config show/theme, task add/start/done/lease/gate/merge/filter/kanban/fanout, worktree list/add/remove, branch".to_string();
+                    "commands: factory status/run <request>/ticket <id>, spawn <agent>, close, delegate <pane> <msg>, broadcast <msg>, session save/clear, export costs/session, module list/install <url> [name]/remove <name>/run <action_id>, ssh <host>, account list/add/env/show, config show/theme, task add/start/done/lease/gate/merge/filter/kanban/fanout, worktree list/add/remove, branch".to_string();
             }
             other => {
                 self.status_message = format!("unknown command: {other}");

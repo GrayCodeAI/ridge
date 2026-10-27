@@ -2,6 +2,7 @@ pub mod agent;
 pub mod api_server;
 pub mod clipboard_image;
 pub mod doctor;
+pub mod factory;
 pub mod git;
 pub mod i18n;
 pub mod inbox;
