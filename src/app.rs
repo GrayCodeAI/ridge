@@ -883,6 +883,13 @@ impl App {
     }
 
     fn spawn_factory(&mut self, request: &str, existing_ticket: bool) {
+        let (target, request) = match crate::core::factory::target(&self.cwd, request) {
+            Ok(target) => target,
+            Err(error) => {
+                self.status_message = error;
+                return;
+            }
+        };
         let request = request.trim();
         if request.is_empty() {
             self.status_message = "factory needs a request or ticket ID".to_string();
@@ -892,14 +899,14 @@ impl App {
         command.arg("factory");
         command.arg("run");
         command.arg("--repo");
-        command.arg(self.cwd.as_os_str());
+        command.arg(target.as_os_str());
         if existing_ticket {
             command.arg(request);
         } else {
             command.arg("--request");
             command.arg(request);
         }
-        command.cwd(&self.cwd);
+        command.cwd(&target);
         match PtySession::spawn(command, 24, 80) {
             Ok(pty) => {
                 let id = self.next_pane_id;
@@ -911,7 +918,7 @@ impl App {
                 self.panes.push(pane);
                 self.active_pane = self.panes.len() - 1;
                 self.assign_pane_to_workspace(id);
-                self.status_message = format!("factory started in pane {id}");
+                self.status_message = format!("factory started in pane {id}: {}", target.display());
             }
             Err(error) => self.status_message = format!("factory start failed: {error}"),
         }

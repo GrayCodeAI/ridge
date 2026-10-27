@@ -11,6 +11,11 @@ chooses a test command from the project's manifest and records its Rivet log.
 For a different check, run `reflect factory run --verify '<command>'` directly
 in a terminal pane.
 
+When Ridge starts in the GrayCode workspace root, `:factory status` shows all
+11 repositories. Use `:factory run <repo> <request>` or
+`:factory ticket <repo> <id>` to select one checkout. The platform and logo
+remain independent products with their own verification commands.
+
 The factory command leaves the branch and checkpoint for review; it does not
 merge or publish changes automatically. Build the sibling CLIs with
 `../reflect/scripts/factory-setup.sh`, then add its output directory to `PATH`.
