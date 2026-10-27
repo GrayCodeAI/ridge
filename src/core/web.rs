@@ -7,6 +7,7 @@ use axum::{
     Router,
     extract::State,
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
+    http::{HeaderMap, StatusCode, header},
     response::Html,
     routing::get,
 };
@@ -65,11 +66,20 @@ fn fetch_pane_output(socket_path: &Path, pane_id: usize, cursor: usize) -> Optio
     }))
     .ok()?;
     stream.write_all(request.as_bytes()).ok()?;
-    let mut buf = [0u8; 65536];
-    let n = stream.read(&mut buf).ok()?;
-    let response: serde_json::Value = serde_json::from_slice(&buf[..n]).ok()?;
-    let output = response.get("output")?.as_str()?.to_string();
-    let next_cursor = response.get("next_cursor")?.as_u64()? as usize;
+    let mut buf = Vec::new();
+    stream.take(4 << 20).read_to_end(&mut buf).ok()?;
+    parse_pane_output_response(&buf)
+}
+
+#[cfg(unix)]
+fn parse_pane_output_response(buf: &[u8]) -> Option<(String, usize)> {
+    let response: serde_json::Value = serde_json::from_slice(buf).ok()?;
+    if response.get("ok")?.as_str()? != "ok" {
+        return None;
+    }
+    let data = response.get("data")?;
+    let output = data.get("output")?.as_str()?.to_string();
+    let next_cursor = data.get("next_cursor")?.as_u64()? as usize;
     Some((output, next_cursor))
 }
 
@@ -376,7 +386,7 @@ pub async fn start_web(
         .route("/ws", get(ws_handler))
         .with_state(state);
 
-    let addr: SocketAddr = ([0, 0, 0, 0], port).into();
+    let addr: SocketAddr = ([127, 0, 0, 1], port).into();
     let listener = TcpListener::bind(addr).await?;
     eprintln!("luvus web: http://localhost:{}", port);
     axum::serve(listener, app).await?;
@@ -386,9 +396,28 @@ pub async fn start_web(
 /// WebSocket handler.
 async fn ws_handler(
     ws: WebSocketUpgrade,
+    headers: HeaderMap,
     State(state): State<Arc<WebState>>,
 ) -> impl axum::response::IntoResponse {
-    ws.on_upgrade(move |socket| handle_socket(socket, state))
+    if !allowed_websocket_origin(&headers) {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    Ok(ws.on_upgrade(move |socket| handle_socket(socket, state)))
+}
+
+fn allowed_websocket_origin(headers: &HeaderMap) -> bool {
+    let host = headers.get(header::HOST).and_then(|v| v.to_str().ok());
+    let origin = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok());
+    match (host, origin) {
+        (Some(host), Some(origin)) => {
+            let local_host = host
+                .strip_prefix("localhost:")
+                .or_else(|| host.strip_prefix("127.0.0.1:"));
+            local_host.is_some_and(|port| port.parse::<u16>().is_ok())
+                && origin == format!("http://{host}")
+        }
+        _ => false,
+    }
 }
 
 async fn handle_socket(mut socket: WebSocket, state: Arc<WebState>) {
@@ -396,7 +425,9 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<WebState>) {
     let panes = state.panes_snapshot();
     if !panes.is_empty() {
         let _ = socket
-            .send(Message::Text(serde_json::to_string(&panes).unwrap()))
+            .send(Message::Text(
+                serde_json::to_string(&ServerMessage::List { panes }).unwrap(),
+            ))
             .await;
     }
 
@@ -482,6 +513,26 @@ fn send_to_api_pane(_socket_path: &Path, _pane_id: usize, _message: &str) -> std
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn websocket_rejects_foreign_origins_and_hosts() {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::HOST, "localhost:8080".parse().unwrap());
+        headers.insert(header::ORIGIN, "http://localhost:8080".parse().unwrap());
+        assert!(allowed_websocket_origin(&headers));
+        headers.insert(header::ORIGIN, "https://attacker.example".parse().unwrap());
+        assert!(!allowed_websocket_origin(&headers));
+        headers.insert(header::ORIGIN, "http://localhost:8080".parse().unwrap());
+        headers.insert(header::HOST, "attacker.example:8080".parse().unwrap());
+        assert!(!allowed_websocket_origin(&headers));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn pane_output_uses_api_response_envelope() {
+        let body = br#"{"ok":"ok","data":{"pane":2,"output":"hello","next_cursor":5}}"#;
+        assert_eq!(parse_pane_output_response(body), Some(("hello".into(), 5)));
+    }
 
     #[test]
     fn web_state_update_and_snapshot() {

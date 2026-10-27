@@ -153,12 +153,16 @@ fn handle_stream(app: &Arc<Mutex<crate::app::App>>, mut stream: UnixStream) -> s
 /// Start the socket API server. Runs forever in the calling thread.
 #[cfg(unix)]
 pub fn start_server(app: Arc<Mutex<crate::app::App>>) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
     let path = socket_path();
     if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
+        std::fs::create_dir_all(parent)?;
+        std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700))?;
     }
     let _ = std::fs::remove_file(&path); // remove stale socket
     let listener = UnixListener::bind(&path)?;
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
     eprintln!("ridge api socket: {}", path.display());
     loop {
         let (stream, _) = listener.accept()?;
